@@ -559,6 +559,85 @@ def render_ci(path, title, ci_name):
     return "\n".join(out)
 
 
+# ================= 联模式 =================
+# 对联验三样：字数相等、仄起平收、逐位平仄相反（同位同字另记）。
+
+def render_lian(path, title):
+    text = open(path, encoding="utf-8").read() if path else ""
+    text = "\n".join(l for l in text.split("\n") if not l.strip().startswith("#"))
+    lines = [l.strip() for l in text.split("\n") if l.strip()]
+    if len(lines) < 2:
+        return "联诊要两行：第一行上联，第二行下联。"
+
+    up, down = lines[0], lines[1]
+    cu = [c for c in up if "一" <= c <= "鿿"]
+    cd = [c for c in down if "一" <= c <= "鿿"]
+    out = []
+    out.append(f"玉尺 · 联诊：{title}")
+    out.append("=" * 46)
+    out.append("")
+
+    ok_all = True
+    if len(cu) != len(cd):
+        ok_all = False
+        out.append(f"① 字数：上联 {len(cu)} 字，下联 {len(cd)} 字——对联要求相等。")
+    else:
+        out.append(f"① 字数：各 {len(cu)} 字，相等。")
+
+    tu = tone_of(cu[-1]) if cu else "？"
+    td = tone_of(cd[-1]) if cd else "？"
+    if tu == "仄" and td == "平":
+        out.append(f"② 仄起平收：上联尾「{cu[-1]}」{tu}，下联尾「{cd[-1]}」{td}，合格。")
+    else:
+        ok_all = False
+        out.append(f"② 仄起平收：上联尾「{cu[-1]}」{tu}、下联尾「{cd[-1]}」{td}"
+                   f"——规矩是上联收仄、下联收平，看看要不要调。")
+
+    n = min(len(cu), len(cd))
+    bad, rows = [], []
+    for i in range(n):
+        t1, t2 = tone_of(cu[i]), tone_of(cd[i])
+        same_char = cu[i] == cd[i]
+        if t1 in "平仄" and t2 in "平仄":
+            opposite = t1 != t2
+        else:
+            opposite = None  # 有"通"或"？"，不计
+        if same_char:
+            mark = "＝"
+            bad.append((i + 1, cu[i], t1, cd[i], t2, "同位同字"))
+        elif opposite is False:
+            mark = "✗"
+            bad.append((i + 1, cu[i], t1, cd[i], t2, "平仄未相反"))
+        elif opposite is True:
+            mark = "✓"
+        else:
+            mark = "·"
+        rows.append(f"{cu[i] if i < len(cu) else '·'}{t1} {cd[i] if i < len(cd) else '·'}{t2} {mark}")
+    out.append(f"③ 逐位相反（✓对 ✗未反 ＝同位同字 ·未计）")
+    out.append("-" * 46)
+    seg = []
+    for r in rows:
+        seg.append(r)
+        if len(seg) == 4:
+            out.append("　".join(seg))
+            seg = []
+    if seg:
+        out.append("　".join(seg))
+    if bad:
+        ok_all = False
+        out.append("")
+        out.append("待看处：")
+        for i, a, ta, b, tb, why in bad[:10]:
+            out.append(f"  第 {i} 位：「{a}」（{ta}）对「{b}」（{tb}）——{why}")
+    out.append("")
+    if ok_all:
+        out.append("三条都过。真要说：对仗的讲究（词性相对、结构相称）在笔墨里，玉尺只验平仄这一层。")
+    else:
+        out.append("上面对应处逐条看。联的门道一半在平仄，一半在词性相对——平仄过了，再读一遍词性。")
+    out.append("")
+    return "\n".join(out)
+
+
 def verdict(score):
     if score >= 80:
         return "「有气」——长短相间，读起来有呼吸。"
@@ -662,6 +741,9 @@ def main():
         i = args.index("--ci")
         ci = args[i + 1]
         del args[i:i + 2]
+    lian = "--lian" in args
+    if lian:
+        args.remove("--lian")
     if not args and not ci:
         print(__doc__)
         sys.exit(1)
@@ -673,6 +755,8 @@ def main():
         path = tmp
     if ci:
         print(render_ci(path, title, ci))
+    elif lian:
+        print(render_lian(path, title))
     elif poem:
         print(render_poem(path, title))
     else:
