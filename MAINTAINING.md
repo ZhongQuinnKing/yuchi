@@ -8,10 +8,11 @@
 
 ## 二、提交前门禁
 
-- `python3 check.py`：必需文件、AI 腔、红线危险词、frontmatter
-- `node test_web.js`：双端一致性
-- `bash ~/.claude/tools/privacy_scan.sh .`：隐私闸（发布类动作必跑，原始输出贴进说明）
-- 注意：`__pycache__` 与 `*.pyc` 已在 .gitignore；pyc 文件内含本机路径，绝不能进仓库
+发布或交付类动作，跑一条命令即可：
+
+- `bash release_check.sh`：清缓存（pyc 含本机路径、隐私闸必命中）→ 内容门禁 → 文字校对 → 双端一致性 → 隐私闸；任一失败即停
+- 隐私闸的原始输出须贴进交付说明（不许只说“扫过了”）
+- `__pycache__` 与 `*.pyc` 已在 .gitignore；**跑过 python 就会重生**，每次发布前都要清（脚本第 0 步已固化）
 
 ## 三、校准怎么跑
 
