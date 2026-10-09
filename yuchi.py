@@ -33,6 +33,12 @@ GLUE_WORDS = [
 ENUM_WORDS = ["首先", "其次", "再次", "最后，", "第一，", "第二，", "第三，",
               "其一", "其二", "一方面", "另一方面", "此外", "与此同时", "除此之外"]
 SUM_WORDS = ["综上所述", "总而言之", "由此可见", "总的来说", "总之", "让我们"]
+# 虚词与空夸词：程度副词、空动词、无刻度的夸赞（具体化的反面指标）
+VAGUE_WORDS = [
+    "非常", "十分", "极其", "相当", "格外", "尤为", "堪称", "备受", "深受",
+    "无比", "深深", "大大", "充分", "高度", "至关重要", "意义重大",
+    "进一步提升", "全面优化", "不断完善", "显著提升", "有效改善",
+]
 # 统计词频前先剥离"引文"：成对引号（含直引号）里的内容与 markdown 引用块行。
 # 引用与教学举例是别人/别处的话，不是作者的口吻，不该计入。
 QUOTE_STRIP = re.compile(
@@ -51,6 +57,7 @@ CONFIG = {
     "short_per200": [1.0, 0.2],    # 每 200 字短句数：越多越好
     "glue_density": [1.0, 4.0],    # 套话密度 / 百字：越低越好
     "dash_density": [1.5, 4.0],    # 破折号密度 / 百字：越低越好
+    "vague_density": [0.3, 1.2],   # 虚词密度 / 百字：越低越好（待语料校准）
     "struct_score": [0.0, 3.0],    # 列举词 + 2×总结词：越低越好
     "para_cv": [0.50, 0.15],       # 段落变异系数：越高越好
 }
@@ -169,6 +176,10 @@ def analyze(text):
     r["glue_density"] = (glue_total / total * 100) if total else 0
     r["glue_hits"] = sorted(glue_hits, key=lambda x: -x[1])
 
+    vague_total = sum(stat_text.count(w) for w in VAGUE_WORDS)
+    r["vague_total"] = vague_total
+    r["vague_density"] = (vague_total / total * 100) if total else 0
+
     enum_n = sum(stat_text.count(w) for w in ENUM_WORDS)
     sum_n = sum(stat_text.count(w) for w in SUM_WORDS)
     r["enum_n"], r["sum_n"] = enum_n, sum_n
@@ -195,8 +206,9 @@ def analyze(text):
     s_rhythm = (0.50 * soft(*CONFIG["sent_cv"], r["cv"])
                 + 0.30 * soft(*CONFIG["clause_cv"], r["clause_cv"])
                 + 0.20 * soft(CONFIG["flat_run"][1], CONFIG["flat_run"][0], r["flat_pct"]))
-    s_density = (0.70 * soft(*CONFIG["glue_density"], r["glue_density"])
-                 + 0.30 * soft(*CONFIG["dash_density"], r["dash_density"]))
+    s_density = (0.45 * soft(*CONFIG["glue_density"], r["glue_density"])
+                 + 0.20 * soft(*CONFIG["dash_density"], r["dash_density"])
+                 + 0.35 * soft(*CONFIG["vague_density"], r["vague_density"]))
     s_struct = soft(*CONFIG["struct_score"], r["struct_raw"])
     s_para = soft(*CONFIG["para_cv"], r["para_cv"]) if r["para_cv"] is not None else 0.5
 
@@ -251,6 +263,8 @@ def render(path, title):
         hits = "　".join(f"「{w}」×{c}" for w, c in r["glue_hits"][:8])
         out.append(f"  命中：{hits}")
     out.append(f"  破折号 {r['dash']} 处（{r['dash_density']:.1f}/百字）　分号 {r['semi']} 处")
+    out.append(f"  虚词与空夸词 {r['vague_density']:.1f} / 百字"
+               f"（程度副词与空动词，越多越虚）")
     out.append("")
     out.append("【结构层】")
     out.append(f"  列举词 {r['enum_n']} 处　总结词 {r['sum_n']} 处　"
