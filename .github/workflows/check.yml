@@ -23,8 +23,8 @@ jobs:
       - name: 内容门禁（必需文件 / AI 腔 / 红线词 / frontmatter）
         run: python3 check.py
 
-      - name: 双端一致性（锚定秋夜分数）
-        run: node test_web.js | grep -q "分数 91"
+      - name: 双端一致性（JS 与 Python 逐样本硬比对）
+        run: node test_web.js
 
       - name: 校准冒烟（两群不重叠）
         run: python3 calibrate.py | grep -q "无重叠"
