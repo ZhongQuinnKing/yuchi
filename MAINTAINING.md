@@ -16,8 +16,8 @@
 
 ## 三、校准怎么跑
 
-- 语料：`samples/human/`（真人侧，抽自有项目；约一半为工具性文本）＋ 文学锚 `samples/luxun_qiuye.txt`；`samples/ai_gen/`（AI 合成腔，`make_ai_samples.py`）＋ `samples/ai_real/`（真实 AI 输出两组：通用 `r_*` 与事务 `o_*`，`make_real_ai_samples.py` 生成）
-- `python3 calibrate.py` 输出分布与建议阈值；阈值按人类语料分位数标定（满分点约等于 p75）；人类参考表（PERCENTILE_TABLE，py 与 web 两处）随指标口径重标，改评分必须两端同换
+- 语料：`samples/human/`（自有语料，含工具性文本）＋ `samples/human_prose/`（公版散文锚 41 段，维基文库，作者逝逾五十年）＋ 文学锚 `samples/luxun_qiuye.txt`；`samples/ai_gen/`（AI 合成腔，`make_ai_samples.py`）＋ `samples/ai_real/`（真实 AI 输出两组：通用 `r_*` 与事务 `o_*`，`make_real_ai_samples.py` 生成）
+- `python3 calibrate.py` 输出分布与建议阈值；阈值按人类语料分位数标定（满分点约等于 p75）；人类参考表（PERCENTILE_TABLE）按**散文 52 段**标（公版散文锚 41＋原语料散文型 11），py 与 web 两处同换，改评分必须两端同步
 - **文体识别**（v1.3）：条目/结构化文本（编号行 ≥ 25% 或含表格）不打散文分，`detect_form()` 两端实现须一致（test_web.js 对着比）
 - 诚实边界：分数量的不是作者身份，是文字本身（v1.1 复验结论）；纯散文的人类锚待扩充（扩公版散文排下一批）；真实 AI 分布测的是单一模型，后续继续复量
 
