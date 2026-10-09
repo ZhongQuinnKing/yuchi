@@ -48,11 +48,14 @@ def q(vals, p):
 
 def main():
     human = load("human")
+    prose = load("human_prose")   # 公版散文锚（v1.4 起，参照表按此 + human 散文型标）
     ai = load("ai_gen")
+    real = load("ai_real")        # 真实 AI 输出（v1.1 起）
     anchor = yuchi.analyze(
         open(os.path.join(HERE, "samples", "luxun_qiuye.txt"), encoding="utf-8").read())
 
-    print(f"真人样本 {len(human)} 段　AI 样本 {len(ai)} 段　（另有文学锚：秋夜）")
+    print(f"真人样本 {len(human)} 段　散文锚 {len(prose)} 段　AI 合成 {len(ai)} 段　"
+          f"AI 真实 {len(real)} 段（另有文学锚：秋夜）")
     print()
     head = (f"{'指标':<14}{'人类中位':>10}{'人类范围':>16}"
             f"{'AI中位':>10}{'AI范围':>16}{'建议阈值[满,零]':>20}")
@@ -75,6 +78,9 @@ def main():
     as_ = [r["score"] for _, r in ai]
     print(f"当前评分：人类 {min(hs)} 到 {max(hs)}（中位 {statistics.median(hs):.0f}）")
     print(f"　　　　　AI {min(as_)} 到 {max(as_)}（中位 {statistics.median(as_):.0f}）")
+    rs = [r["score"] for _, r in real]
+    if rs:
+        print(f"　　　　　AI 真实 {min(rs)} 到 {max(rs)}（中位 {statistics.median(rs):.0f}）")
     print(f"　　　　　文学锚（秋夜）{anchor['score']}")
     lo, hi = max(min(hs), min(as_)), min(max(hs), max(as_))
     if lo <= hi:
