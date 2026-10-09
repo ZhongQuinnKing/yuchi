@@ -57,7 +57,7 @@ CONFIG = {
     # 满分点≈人类语料 p75、零点≈AI 语料中位（2026-10-09 按分位数分布重标）
     "sent_cv": [0.55, 0.18],       # 大句变异系数：越高越好
     "clause_cv": [0.55, 0.30],     # 小句变异系数：越高越好
-    "flat_run": [0.20, 0.55],      # 最长平滑段占比：越低越好
+    "flat_run": [2, 6],            # 最长平滑段句数（绝对数，比占比更贴读感）：越低越好
     "short_per200": [1.5, 0.2],    # 每 200 字短句数：越多越好
     "glue_density": [0.5, 3.0],    # 套话密度 / 百字：越低越好
     "dash_density": [0.6, 3.0],    # 破折号密度 / 百字：越低越好
@@ -230,7 +230,7 @@ def analyze(text):
     # 四层得分
     s_rhythm = (0.40 * soft(*CONFIG["sent_cv"], r["cv"])
                 + 0.25 * soft(*CONFIG["clause_cv"], r["clause_cv"])
-                + 0.15 * soft(CONFIG["flat_run"][0], CONFIG["flat_run"][1], r["flat_pct"])
+                + 0.15 * soft(*CONFIG["flat_run"], r["flat_n"])
                 + 0.20 * soft(*CONFIG["short_per200"], r["short_per200"]))
     s_density = (0.45 * soft(*CONFIG["glue_density"], r["glue_density"])
                  + 0.20 * soft(*CONFIG["dash_density"], r["dash_density"])
@@ -243,6 +243,7 @@ def analyze(text):
     score = round(100 * (WEIGHTS["rhythm"] * s_rhythm + WEIGHTS["density"] * s_density
                          + WEIGHTS["struct"] * s_struct + WEIGHTS["para"] * s_para))
     r["score"] = max(0, min(100, score))
+    r["form"], r["form_item_ratio"] = detect_form(text)
     return r
 
 
@@ -693,8 +694,8 @@ def render_lian(path, title):
 
 
 # 人类参考样本的分数分布（升序，20 段真人语料；语料或阈值变动后跑 calibrate.py 重取）
-PERCENTILE_TABLE = [53, 54, 58, 58, 66, 71, 72, 74, 75, 76,
-                    77, 79, 79, 79, 80, 86, 87, 92, 92, 97]
+PERCENTILE_TABLE = [56, 59, 63, 64, 72, 74, 76, 76, 78, 80,
+                    80, 81, 82, 84, 85, 89, 91, 92, 92, 100]
 
 
 def percentile_of(score):
@@ -769,6 +770,8 @@ def render_json(r):
         "score": r["score"],
         "percentile": percentile_of(r["score"]),
         "verdict": verdict(r["score"]),
+        "form": r["form"],
+        "form_item_ratio": round(r["form_item_ratio"], 3),
         "layers": {
             "rhythm": round(r["s_rhythm"], 3),
             "density": round(r["s_density"], 3),
@@ -817,6 +820,50 @@ def render_batch(files):
     return "\n".join(lines)
 
 
+ITEM_LINE = re.compile(
+    r"^\s*(?:[一二三四五六七八九十]+[、.．]|[0-9]+[.、)）]"
+    r"|（[一二三四五六七八九十0-9]+）|[-*•·])")
+TABLE_LINE = re.compile(r"^\s*\|")
+
+
+def detect_form(text):
+    """文体识别：散文 or 条目/结构化（通知、纪要、清单、模板）。
+
+    判据：编号/符号开头的行占比 ≥ 0.25，或出现表格行。
+    结构化文本的“长短参差”多来自版式而非呼吸，不按散文口径打分。
+    # 开头的行是注释/标题（样本文件与 markdown 约定），整个剔除。
+    """
+    lines = [l for l in text.split("\n")
+             if l.strip() and not l.strip().startswith("#")]
+    if not lines:
+        return "prose", 0.0
+    item_n = sum(1 for l in lines if ITEM_LINE.match(l))
+    table_n = sum(1 for l in lines if TABLE_LINE.match(l))
+    ratio = item_n / len(lines)
+    if ratio >= 0.25 or table_n > 0:
+        return "structured", ratio
+    return "prose", ratio
+
+
+def render_structured(r, title):
+    out = []
+    out.append(f"玉尺 · 文气诊断：{title}")
+    out.append("=" * 46)
+    out.append("")
+    out.append("【文体识别】条目 / 结构化文本")
+    out.append(f"  编号或符号开头的行占 {r['form_item_ratio']*100:.0f}%——通知、纪要、清单、模板这类文体。")
+    out.append("")
+    out.append("玉尺的呼吸分是给散文的。这类文本的“整齐”是文体要求，不是毛病——")
+    out.append("拿散文的尺量条目，量出来的高分不作数，低分也不算数。")
+    out.append("")
+    out.append("这一类该看的是：条目齐不齐、信息全不全、层级顺不顺。")
+    out.append("那是文体的规矩，不是呼吸。")
+    out.append("")
+    out.append(f"（客观读数：{r['n']} 句 / {r['total']} 字。文中的叙述段若想按散文量，")
+    out.append("单独摘出来再量。）")
+    return "\n".join(out)
+
+
 def verdict(score):
     if score >= 80:
         return "「有气」——长短相间，读起来有呼吸。"
@@ -838,6 +885,8 @@ def render(path, title):
         return "文本太短（不足五十个汉字），节奏量不出来——多写几段再量。"
     small_sample = n_hz < 100
     r = analyze(text)
+    if r["form"] == "structured":
+        return render_structured(r, title)
     out = []
     out.append(f"玉尺 · 文气诊断：{title}")
     out.append("=" * 46)
@@ -883,7 +932,7 @@ def render(path, title):
     out.append("")
     out.append("【改法（落到句，不给形容词）】")
     tips = []
-    if r["flat_pct"] >= 0.4:
+    if r["flat_n"] >= 4:
         tips.append(f"全篇有一段 {r['flat_n']} 句的平滑区，长度变化不到 8 字。"
                     "挑其中最长的两句动手：一句拆成两句，一句砍到十字以内。")
     if r["cv"] < 0.30:

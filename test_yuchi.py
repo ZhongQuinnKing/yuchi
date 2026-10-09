@@ -110,6 +110,28 @@ class TestPoem(unittest.TestCase):
             os.unlink(p)
 
 
+class TestForm(unittest.TestCase):
+    def test_structured_form_detected(self):
+        # 条目/模板文本：识别为 structured，render 不给散文分
+        t = ("一、会议时间\n2026 年 10 月 1 日\n二、参会人员\n张三、李四、王五\n"
+             "三、会议内容\n讨论了项目排期与分工。\n四、待办事项\n1. 张三跟进排期\n2. 李四整理纪要")
+        r = yuchi.analyze(t)
+        self.assertEqual(r["form"], "structured")
+        p = _tmp(t)
+        try:
+            out = yuchi.render(p, "纪要")
+            self.assertIn("文体识别", out)
+            self.assertNotIn("总评", out)
+        finally:
+            os.unlink(p)
+
+    def test_prose_form_untouched(self):
+        r = yuchi.analyze("雨停在半空。瓦片亮了一下，巷子深处的猫叫拖得很长。"
+                          "我把伞收起来，又撑开，像一句没说出口的话。后来天黑了，"
+                          "灯一盏一盏亮起来，风从窗缝里挤进来。")
+        self.assertEqual(r["form"], "prose")
+
+
 class TestQu(unittest.TestCase):
     def test_qu_rhyme_one_tune(self):
         # 《天净沙·秋思》五句全押家麻；北曲一韵到底（曲模式回归）

@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 METRICS = [
     ("cv", "大句变异系数", True),
     ("clause_cv", "小句变异系数", True),
-    ("flat_pct", "平滑段占比", False),
+    ("flat_n", "最长平滑段句数", False),
     ("short_per200", "短句密度/200字", True),
     ("glue_density", "套话密度/百字", False),
     ("dash_density", "破折号密度/百字", False),
