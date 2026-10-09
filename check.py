@@ -26,6 +26,7 @@ REQUIRED = [
     "references/04-具体.md", "references/05-改稿流程.md", "references/06-自检清单.md",
     "references/07-验证与依据.md", "references/08-文体.md", "references/09-腔调.md",
     "references/10-AI协作.md", "references/11-开头与结尾.md", "references/12-练习.md",
+    "references/13-诗的呼吸.md", "references/14-工具与资源地图.md",
 ]
 
 AI_PATTERNS = ["一方面", "综上所述", "值得注意的是", "总而言之", "[待补充]", "TODO", "TBD"]
