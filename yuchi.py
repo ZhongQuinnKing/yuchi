@@ -9,7 +9,8 @@
 五层指标：大句节奏 / 小句呼吸 / 密度 / 结构 / 段落。
 阈值集中在 CONFIG，用 calibrate.py 按语料校准（当前为先验值）。
 用法：
-    python3 yuchi.py <文件路径> [--title 标题] [--poem]（--poem 走诗模式）
+    python3 yuchi.py <文件路径> [--title 标题] [--poem]
+        （--poem 走诗模式；--ci 词牌名 走词模式：给谱并对谱，文件可省略）
     echo "文本" | python3 yuchi.py -
 零依赖，纯标准库。
 """
@@ -416,6 +417,148 @@ def render_poem(path, title):
     return "\n".join(out)
 
 
+# ================= 词模式 =================
+# 词是照谱填的：先给谱（逐字平仄与句读韵位），再对谱（逐字核对）。
+# 谱与韵书数据来自开源词谱（见 data/README.md）。
+
+_CI_TUNES = None
+_CI_WORD = None
+
+
+def load_ci_tunes():
+    global _CI_TUNES
+    if _CI_TUNES is None:
+        try:
+            _CI_TUNES = json.load(open(os.path.join(HERE, "data", "Ci_Tunes.json"),
+                                       encoding="utf-8"))
+        except Exception:
+            _CI_TUNES = {}
+    return _CI_TUNES
+
+
+def load_ci_word():
+    global _CI_WORD
+    if _CI_WORD is None:
+        try:
+            _CI_WORD = json.load(open(os.path.join(HERE, "data", "Ci_Word_Tune.json"),
+                                      encoding="utf-8"))
+        except Exception:
+            _CI_WORD = {}
+    return _CI_WORD
+
+
+def ci_tone_of(ch):
+    w = load_ci_word().get(ch)
+    if not w:
+        return "？", None
+    return {"平": "平", "仄": "仄", "多": "通"}.get(w.get("tune"), "？"), w.get("rhyme")
+
+
+def render_ci(path, title, ci_name):
+    tunes = load_ci_tunes()
+    if not tunes:
+        return "词谱数据未就位（data/Ci_Tunes.json，见 data/README.md）。"
+    if ci_name not in tunes:
+        cand = [k for k in tunes if ci_name in k or k in ci_name]
+        if cand:
+            return f"没有「{ci_name}」这个词牌。是不是想找：{'、'.join(cand[:8])}？"
+        return f"词谱库里没有「{ci_name}」（共 {len(tunes)} 个词牌）。"
+
+    entry = tunes[ci_name]
+    formats = entry["formats"]
+    text = open(path, encoding="utf-8").read() if path else ""
+    text = "\n".join(l for l in text.split("\n") if not l.strip().startswith("#"))
+    user_han = [c for c in text if "一" <= c <= "鿿"]
+
+    out = []
+    out.append(f"玉尺 · 词诊：{title}（词牌：{ci_name}）")
+    out.append("=" * 46)
+    out.append("")
+    out.append(f"该词牌共 {len(formats)} 体。")
+
+    match = None
+    for idx, f in enumerate(formats, 1):
+        if user_han and len(f["tunes"]) == len(user_han):
+            match = (idx, f)
+            break
+
+    if match:
+        idx, f = match
+        out.append(f"你的词 {len(user_han)} 字，对上第 {idx} 体：「{f['sketch']}」"
+                   f"（例作：{f.get('author', '前人')}）")
+    elif user_han:
+        sizes = "、".join(str(len(f["tunes"])) + "字" for f in formats[:8])
+        out.append(f"你的词 {len(user_han)} 字，没对上现成的体（各体字数：{sizes}"
+                   + ("…" if len(formats) > 8 else "") + "）。")
+    out.append("")
+
+    spec = (match[1] if match else formats[0])["tunes"]
+    # 谱
+    out.append("谱（平／仄／中＝可平可仄；行末为句读与韵位）")
+    out.append("-" * 46)
+    seg = []
+    for i, sp in enumerate(spec, 1):
+        seg.append(sp["tune"])
+        if sp.get("rhythm") in ("句", "韵") or i == len(spec):
+            out.append("".join(seg))
+            seg = []
+    out.append("")
+
+    if match:
+        # 对谱
+        out.append("对谱（你的字＋核对：✓合 ✗不合 ·可平可仄）")
+        out.append("-" * 46)
+        rows, bad, seg = [], 0, []
+        for i, (sp, ch) in enumerate(zip(spec, user_han), 1):
+            expect = sp["tune"]
+            actual, _r = ci_tone_of(ch)
+            ok = expect == "中" or actual == "通" or actual == expect
+            if not ok:
+                bad += 1
+            mark = "·" if expect == "中" else ("✓" if ok else "✗")
+            rows.append((i, ch, expect, actual, mark))
+            seg.append(f"{ch}{mark}")
+            if sp.get("rhythm") in ("句", "韵") or i == len(rows) == len(spec):
+                out.append("".join(seg))
+                seg = []
+        out.append("")
+        out.append(f"合计 {len(rows)} 字，不合 {bad} 处（谱标“中”或你的字为多音时不计）。")
+        # 逐处列出不合
+        bads = [(i, ch, e, a) for i, ch, e, a, m in rows if m == "✗"]
+        if bads:
+            out.append("")
+            out.append("不合处逐条：")
+            for i, ch, e, a in bads[:12]:
+                out.append(f"  第 {i} 字「{ch}」：谱要{e}声，字是{a}声。")
+            if len(bads) > 12:
+                out.append(f"  （另有 {len(bads) - 12} 处，同上自行核对。）")
+        # 韵脚（谱标“韵”位）
+        yun_pos = [i for i, sp in enumerate(spec, 1) if sp.get("rhythm") == "韵"]
+        if yun_pos:
+            out.append("")
+            out.append("韵脚（谱标“韵”位的字）")
+            out.append("-" * 46)
+            yl = []
+            for p in yun_pos:
+                if p <= len(user_han):
+                    ch = user_han[p - 1]
+                    _t, rhyme = ci_tone_of(ch)
+                    yl.append((p, ch, rhyme or "词韵表未收"))
+            for p, ch, rhyme in yl:
+                out.append(f"第 {p} 字「{ch}」：{rhyme}")
+            same = {r for _, _, r in yl if r != "词韵表未收"}
+            if len(same) > 1:
+                out.append("韵脚不在同一部（词林正韵）。词要按词牌的韵位押韵，看看要不要调。")
+    out.append("")
+    desc = entry.get("desc", "")
+    if desc:
+        out.append("词牌小记（节选自开源词谱）")
+        out.append("-" * 46)
+        out.append(desc[:180] + ("…" if len(desc) > 180 else ""))
+    out.append("")
+    return "\n".join(out)
+
+
 def verdict(score):
     if score >= 80:
         return "「有气」——长短相间，读起来有呼吸。"
@@ -514,13 +657,26 @@ def main():
     poem = "--poem" in args
     if poem:
         args.remove("--poem")
-    path = args[0]
+    ci = None
+    if "--ci" in args:
+        i = args.index("--ci")
+        ci = args[i + 1]
+        del args[i:i + 2]
+    if not args and not ci:
+        print(__doc__)
+        sys.exit(1)
+    path = args[0] if args else ""
     if path == "-":
         text = sys.stdin.read()
         tmp = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".stdin_tmp.txt")
         open(tmp, "w", encoding="utf-8").write(text)
         path = tmp
-    print(render_poem(path, title) if poem else render(path, title))
+    if ci:
+        print(render_ci(path, title, ci))
+    elif poem:
+        print(render_poem(path, title))
+    else:
+        print(render(path, title))
 
 
 if __name__ == "__main__":

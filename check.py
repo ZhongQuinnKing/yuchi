@@ -20,6 +20,8 @@ REFS = os.path.join(HERE, "references")
 REQUIRED = [
     "README.md", "SKILL.md", "LICENSE", "LICENSE-CODE", "CHANGELOG.md", "MAINTAINING.md",
     "web/index.html", "yuchi.py",
+    "data/Word_Tune.json", "data/Pingshui_Rhyme.json",
+    "data/Ci_Word_Tune.json", "data/Ci_Tunes.json",
     "references/01-节奏.md", "references/02-密度.md", "references/03-结构.md",
     "references/04-具体.md", "references/05-改稿流程.md", "references/06-自检清单.md",
     "references/07-验证与依据.md", "references/08-文体.md", "references/09-腔调.md",
