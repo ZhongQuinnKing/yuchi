@@ -127,7 +127,7 @@ const QUOTE_STRIP = /[“][^“”]*[”]|[「][^「」]*[」]|[『][^『』]*[�
 const QUOTE_BLOCK = /^[ \t]*> .*$/gm;
 const CONFIG = {
   /* 满分点≈人类语料 p75、零点≈AI 语料中位（2026-10-09 重标） */
-  sent_cv: [0.55, 0.18], clause_cv: [0.55, 0.30], flat_run: [0.20, 0.55],
+  sent_cv: [0.55, 0.18], clause_cv: [0.55, 0.30], flat_run: [2, 6],
   short_per200: [1.5, 0.2], glue_density: [0.5, 3.0], dash_density: [0.6, 3.0],
   vague_density: [0.2, 1.0],
   struct_score: [0.0, 6.0], para_cv: [0.58, 0.20],
@@ -235,7 +235,7 @@ function analyze(text) {
 
   const sRhythm = 0.40 * soft(...CONFIG.sent_cv, r.cv)
                 + 0.25 * soft(...CONFIG.clause_cv, r.clauseCv)
-                + 0.15 * soft(CONFIG.flat_run[0], CONFIG.flat_run[1], r.flatPct)
+                + 0.15 * soft(CONFIG.flat_run[0], CONFIG.flat_run[1], r.flatN)
                 + 0.20 * soft(...CONFIG.short_per200, r.shortPer200);
   const sDensity = 0.45 * soft(...CONFIG.glue_density, r.glueDensity)
                  + 0.20 * soft(...CONFIG.dash_density, r.dashDensity)
@@ -246,7 +246,23 @@ function analyze(text) {
   r.score = Math.max(0, Math.min(100, Math.round(100 * (
     WEIGHTS.rhythm * sRhythm + WEIGHTS.density * sDensity +
     WEIGHTS.struct * sStruct + WEIGHTS.para * sPara))));
+  const fm = detectForm(text);
+  r.form = fm.form; r.formItemRatio = fm.ratio;
   return r;
+}
+
+/* 文体识别：条目/结构化文本（通知、纪要、清单、模板）不按散文口径打分；
+   # 行是注释/标题，整个剔除 */
+const ITEM_LINE = /^\s*(?:[一二三四五六七八九十]+[、.．]|[0-9]+[.、)）]|（[一二三四五六七八九十0-9]+）|[-*•·])/;
+const TABLE_LINE = /^\s*\|/;
+function detectForm(text) {
+  const lines = text.split("\n").filter(l => l.trim() && !l.trim().startsWith("#"));
+  if (!lines.length) return { form: "prose", ratio: 0 };
+  const itemN = lines.filter(l => ITEM_LINE.test(l)).length;
+  const tableN = lines.filter(l => TABLE_LINE.test(l)).length;
+  const ratio = itemN / lines.length;
+  return (ratio >= 0.25 || tableN > 0)
+    ? { form: "structured", ratio } : { form: "prose", ratio };
 }
 
 /* 平水韵表由构建脚本注入（data/Pingshui_Rhyme.json，chinese_word_rhyme，MIT；见 data/README.md） */
@@ -8661,8 +8677,8 @@ function toPoemText(r) {
 }
 
 /* 人类参考样本的分数分布（与命令行端同一张表，语料或阈值变动后两边同换） */
-const PERCENTILE_TABLE = [53, 54, 58, 58, 66, 71, 72, 74, 75, 76,
-                          77, 79, 79, 79, 80, 86, 87, 92, 92, 97];
+const PERCENTILE_TABLE = [56, 59, 63, 64, 72, 74, 76, 76, 78, 80,
+                          80, 81, 82, 84, 85, 89, 91, 92, 92, 100];
 function percentileOf(score) {
   const below = PERCENTILE_TABLE.filter(v => v < score).length;
   const equal = PERCENTILE_TABLE.filter(v => v === score).length;
@@ -8678,7 +8694,7 @@ function verdict(score) {
 
 function makeTips(r) {
   const tips = [];
-  if (r.flatPct >= 0.4)
+  if (r.flatN >= 4)
     tips.push(`全篇有一段 ${r.flatN} 句的平滑区，长度变化不到 8 字。挑其中最长的两句动手：一句拆成两句，一句砍到十字以内。`);
   if (r.cv < 0.30)
     tips.push("大句长短太齐。在长句群中间安插短句，让读者有换气的地方。");
@@ -8702,6 +8718,19 @@ const $ = (id) => document.getElementById(id);
 const DEMO = "在当今快速发展的现代社会中，人际关系的重要性正在日益凸显。一方面，良好的人际关系能够为我们提供重要的情感支持和实际帮助，让我们在困难时刻感受到温暖与力量。另一方面，不良的人际关系可能会给我们带来诸多困扰和精神压力，甚至影响到我们的身心健康和工作效率。值得注意的是，建立良好的人际关系需要我们在日常生活中持续投入时间和精力，这并不是一蹴而就的事情。首先，我们应该学会真诚地对待他人，以心换心，用真心去换取他人的信任与尊重。其次，我们需要掌握有效的沟通技巧，学会倾听他人的想法和感受，避免不必要的误解和冲突。最后，我们要保持积极乐观的心态，用正能量去感染身边的每一个人，营造和谐友善的氛围。综上所述，人际关系是一门需要终身学习的艺术，它既需要我们付出真诚的努力，也需要我们保持足够的耐心。让我们从今天开始，用心经营每一段关系，共同营造更加和谐美好的人际环境。";
 
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+function renderStructured(r) {
+  return `<div class="card">
+    <div class="score-row"><span class="score" style="font-size:30px">文体识别</span></div>
+    <div class="kv"><span>条目 / 结构化文本</span><b>编号或符号开头的行占 ${(r.formItemRatio * 100).toFixed(0)}%</b></div>
+    <div class="sub">通知、纪要、清单、模板这类文体。</div>
+  </div>
+  <div class="card">
+    <p>玉尺的呼吸分是给散文的。这类文本的“整齐”是文体要求，不是毛病——拿散文的尺量条目，量出来的高分不作数，低分也不算数。</p>
+    <p>这一类该看的是：条目齐不齐、信息全不全、层级顺不顺。那是文体的规矩，不是呼吸。</p>
+    <div class="sub">客观读数：${r.n} 句 / ${r.total} 字。文中的叙述段若想按散文量，单独摘出来再量。</div>
+  </div>`;
+}
 
 function renderReport(r) {
   const L = [];
@@ -8752,6 +8781,12 @@ function renderReport(r) {
 }
 
 function toTextReport(r, plain) {
+  if (r.form === "structured") {
+    return ["玉尺 · 文气诊断",
+      `文体识别：条目 / 结构化文本（编号或符号开头的行占 ${(r.formItemRatio * 100).toFixed(0)}%）`,
+      "玉尺的呼吸分是给散文的。这类文本的整齐是文体要求，不是毛病。",
+      "这一类该看的是：条目齐不齐、信息全不全、层级顺不顺。"].join("\n");
+  }
   const L = [];
   L.push(`玉尺 · 文气诊断`);
   L.push(`总评 ${r.score}/100 ${verdict(r.score)}`);
@@ -8787,7 +8822,7 @@ $("run").addEventListener("click", () => {
     }
     const r = analyze(t);
     r.smallSample = hanzi(t) < 100;
-    $("result").innerHTML = renderReport(r);
+    $("result").innerHTML = r.form === "structured" ? renderStructured(r) : renderReport(r);
     lastReport = toTextReport(r);
   }
   $("copy").style.display = "inline-block";

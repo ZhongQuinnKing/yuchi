@@ -66,6 +66,17 @@ for (const f of ['samples/shi_qijue.txt', 'samples/shi_qijue_punct.txt']) {
   if (!same) allOk = false;
 }
 
+console.log('\n── 文体识别：JS vs Python（form / 条目行占比）──');
+for (const f of ['samples/ai_real/o_08.txt', 'samples/ai_real/r_01.txt', 'samples/human/h_01.txt']) {
+  const t = fs.readFileSync(path.join(here, f), 'utf8');  // 用原文（load 会滤 # 注释行，form 检测要原始行）
+  const js = analyze(t);
+  const pyData = JSON.parse(py(`"${f}" --json`));
+  const same = js.form === pyData.form
+    && Math.abs(js.formItemRatio - pyData.form_item_ratio) < 0.005;
+  console.log(`${f}\tJS ${js.form}/${(js.formItemRatio * 100).toFixed(0)}%  PY ${pyData.form}/${(pyData.form_item_ratio * 100).toFixed(0)}%\t${same ? '✓' : '✗ 不一致'}`);
+  if (!same) allOk = false;
+}
+
 console.log('\n── 纯英文：py 太短保护 ──');
 const en = JSON.parse(py('"samples/s_edge_english.txt" --json'));
 const enOk = en.error !== undefined;
