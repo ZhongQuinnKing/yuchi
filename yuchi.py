@@ -176,7 +176,9 @@ def analyze(text):
     r["glue_density"] = (glue_total / total * 100) if total else 0
     r["glue_hits"] = sorted(glue_hits, key=lambda x: -x[1])
 
-    vague_total = sum(stat_text.count(w) for w in VAGUE_WORDS)
+    # "十分"单独走正则：排除"四十分钟"这类跨词误匹配（词表法的已知假阳性）
+    vague_total = sum(stat_text.count(w) for w in VAGUE_WORDS if w != "十分")
+    vague_total += len(re.findall(r"十分(?!钟)", stat_text))
     r["vague_total"] = vague_total
     r["vague_density"] = (vague_total / total * 100) if total else 0
 
