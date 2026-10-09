@@ -13,6 +13,7 @@
     echo "文本" | python3 yuchi.py -
 零依赖，纯标准库。
 """
+import json
 import os
 import re
 import statistics
@@ -228,6 +229,80 @@ def analyze(text):
 # 诗按行读：行就是它的句子。诗模式给“体检单”为主、不打总分——
 # 诗的评判太主观，尺子只报数，判断留给读者。
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+_TONE_TABLE = None
+_RHYME_INDEX = None
+
+
+def load_tone_table():
+    """字→平仄（平水韵体系）。数据来源：chinese_word_rhyme（MIT），见 data/README.md"""
+    global _TONE_TABLE
+    if _TONE_TABLE is None:
+        try:
+            _TONE_TABLE = json.load(open(os.path.join(HERE, "data", "Word_Tune.json"),
+                                         encoding="utf-8"))
+        except Exception:
+            _TONE_TABLE = {}
+    return _TONE_TABLE
+
+
+def load_rhyme_index():
+    """字→平水韵韵部的反向索引"""
+    global _RHYME_INDEX
+    if _RHYME_INDEX is None:
+        idx = {}
+        try:
+            d = json.load(open(os.path.join(HERE, "data", "Pingshui_Rhyme.json"),
+                               encoding="utf-8"))
+            for _sheng, bu in d.items():
+                for yun, chars in bu.items():
+                    for ch in chars:
+                        idx.setdefault(ch, set()).add(yun)
+        except Exception:
+            idx = {}
+        _RHYME_INDEX = idx
+    return _RHYME_INDEX
+
+
+def tone_of(ch):
+    t = load_tone_table().get(ch)
+    if t == "平":
+        return "平"
+    if t == "仄":
+        return "仄"
+    if t == "多":
+        return "通"
+    return "？"
+
+
+def is_regulated(lens):
+    """疑似近体诗：全 5 言或全 7 言，且行数为 4 的倍数"""
+    return bool(lens) and len(set(lens)) == 1 and lens[0] in (5, 7) and len(lens) % 4 == 0
+
+
+def annotate_tones(lines):
+    out = []
+    for l in lines:
+        out.append("".join(tone_of(c) for c in l if "一" <= c <= "鿿"))
+    return out
+
+
+def tone_notes(seq):
+    """读感提示：连续四个以上的同声调"""
+    notes = []
+    n, i = len(seq), 0
+    while i < n:
+        j = i
+        while j < n and seq[j] == seq[i]:
+            j += 1
+        run, ch = j - i, seq[i]
+        if ch in "平仄" and run >= 4:
+            notes.append(f"第 {i+1} 到 {j} 字连着 {run} 个{ch}声"
+                         + ("，念起来发紧" if ch == "仄" else "，念起来发飘"))
+        i = j
+    return notes
+
+
 def analyze_poem(text):
     lines = [l.strip() for l in text.split("\n")
              if l.strip() and not l.strip().startswith("#")]
@@ -267,10 +342,11 @@ def analyze_poem(text):
     r["sections"] = sections
 
     issues = []
-    if r["flat_run"] >= 3:
+    reg = is_regulated(lens)  # 近体诗每句等长是格律使然，豆腐块与“行长太平”不适用
+    if r["flat_run"] >= 3 and not reg:
         issues.append(f"连续 {r['flat_run']} 行长度几乎一样，像豆腐块。"
                       "挑一行动手：要么砍掉一半，要么拉长。")
-    if r["n"] >= 5 and r["cv"] < 0.28:
+    if r["n"] >= 5 and r["cv"] < 0.28 and not reg:
         issues.append("行长太平，全诗缺少起伏。自由诗的自由，一半在行长上。")
     if r["adj_rep"] >= 2:
         issues.append(f"有 {r['adj_rep']} 处相邻行行尾同字，读起来像打嗝；"
@@ -302,10 +378,37 @@ def render_poem(path, title):
     out.append(f"行尾：{'／'.join(r['tails'])}")
     out.append(f"相邻同尾 {r['adj_rep']} 处")
     out.append("")
+
+    extra_notes = []
+    if is_regulated(r["lens"]):
+        seqs = annotate_tones(r["lines"])
+        out.append("平仄标注（平／仄／通＝多音；？＝韵表未收）")
+        out.append("-" * 46)
+        for i, (l, seq) in enumerate(zip(r["lines"], seqs), 1):
+            out.append(f"{i:>2} {seq}  {l}")
+        out.append("")
+        for i, seq in enumerate(seqs, 1):
+            for nt in tone_notes(seq):
+                extra_notes.append(f"第 {i} 行：{nt}")
+        rhyme_idx = load_rhyme_index()
+        yun_list = []
+        for i in range(2, len(r["lines"]) + 1, 2):
+            lastch = r["lines"][i - 1][-1]
+            yuns = sorted(rhyme_idx.get(lastch, []))
+            yun_list.append((i, lastch, "／".join(yuns) if yuns else "韵表未收"))
+        out.append("韵脚（偶数句）")
+        out.append("-" * 46)
+        for i, ch, yun in yun_list:
+            out.append(f"第 {i} 句尾「{ch}」：{yun}")
+        same = {yun for _, _, yun in yun_list if yun != "韵表未收"}
+        if len(same) > 1:
+            extra_notes.append("偶数句的韵脚不在同一韵部。近体诗偶句要押韵，看看要不要调。")
+        out.append("")
     out.append("体检（诗的判断留给你，尺子只报数）")
     out.append("-" * 46)
-    if r["issues"]:
-        for i, t in enumerate(r["issues"], 1):
+    all_notes = r["issues"] + extra_notes
+    if all_notes:
+        for i, t in enumerate(all_notes, 1):
             out.append(f"{i}. {t}")
     else:
         out.append("没查出明显的问题。真要说：把最重的那一行往前提一提，看看气顺不顺。")
