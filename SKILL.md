@@ -91,3 +91,8 @@ description: 玉尺——中文写作的呼吸。当用户请你写中文内容�
 - `references/05-改稿流程.md`：一篇文章怎么从头改到尾
 - `references/06-自检清单.md`：逐字的验收表
 - `references/07-验证与依据.md`：本技能的判断从哪来（研究出处与实测）
+- `references/08-文体.md`：公文、学术、公众号、邮件、演讲、文学各写各的谱
+- `references/09-腔调.md`：从“像人”到“像你”（文风档案）
+- `references/10-AI协作.md`：让 AI 写出人味的字（给料、给谱、给样子、给检查）
+- `references/11-开头与结尾.md`：峻峭与余韵
+- `references/12-练习.md`：日课与周课，手艺是练出来的
