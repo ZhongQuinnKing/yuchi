@@ -98,6 +98,17 @@ class TestPoem(unittest.TestCase):
                                "我把伞收起来\n又撑开\n像一句没说出口的话")
         self.assertFalse(any("豆腐块" in i for i in r["issues"]))
 
+    def test_rhyme_after_punctuation(self):
+        # 带标点的诗：韵脚取字必须先剥标点（修「取到句号」bug 的回归）
+        p = _tmp("雨过山村草木新，\n溪流绕屋水粼粼。\n白云一片松间去，\n留得清凉与路人。\n")
+        try:
+            out = yuchi.render_poem(p, "诗")
+            self.assertIn("第 2 句尾「粼」：十一真", out)
+            self.assertIn("第 4 句尾「人」：十一真", out)
+            self.assertNotIn("句尾「。」", out)  # 不能把标点当韵脚字
+        finally:
+            os.unlink(p)
+
 
 class TestRegulatedAndCiLian(unittest.TestCase):
     def test_regulated_detection(self):
