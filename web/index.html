@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>玉尺 · 量一量你的中文</title>
+<meta name="description" content="玉尺：量中文的呼吸。把一段文字贴进来，量出句长节奏、套话密度与结构，指出哪里读起来不像人写的，并给到句子的改法。">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --ink: #2b2b2b; --sub: #6d675e; --jade: #3f6f60; --jade-soft: #eef4f1;
+    --paper: #faf8f4; --line: #e6e0d6; --warn: #a4553f;
+  }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    color: var(--ink); background: var(--paper); line-height: 1.8;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 0 20px 64px; }
+  header { padding: 56px 0 8px; text-align: center; }
+  h1 { font-family: "Songti SC", "STSong", "SimSun", serif;
+       font-size: 44px; letter-spacing: 14px; text-indent: 14px; font-weight: 600; }
+  .epigraph { font-family: "Songti SC", serif; color: var(--jade);
+              font-size: 15px; letter-spacing: 2px; margin-top: 10px; }
+  .epigraph span { color: var(--sub); font-size: 12px; letter-spacing: 0; margin-left: 6px; }
+  .lead { text-align: center; color: var(--sub); font-size: 14px; margin: 18px 0 26px; }
+  textarea {
+    width: 100%; min-height: 190px; padding: 18px 20px; font-size: 15.5px;
+    font-family: inherit; line-height: 1.9; color: var(--ink);
+    background: #fff; border: 1px solid var(--line); border-radius: 12px;
+    resize: vertical; outline: none;
+  }
+  textarea:focus { border-color: var(--jade); }
+  .btns { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
+  button {
+    padding: 11px 26px; font-size: 15px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--jade); background: var(--jade); color: #fff;
+    font-family: inherit; letter-spacing: 3px;
+  }
+  button.ghost { background: transparent; color: var(--jade); letter-spacing: 1px; }
+  button:hover { opacity: .88; }
+  #result { margin-top: 34px; }
+  .card {
+    background: #fff; border: 1px solid var(--line); border-radius: 14px;
+    padding: 26px 28px; margin-bottom: 18px;
+  }
+  .score-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .score { font-size: 52px; font-weight: 700; color: var(--jade);
+           font-family: "Songti SC", serif; }
+  .verdict { font-size: 16px; color: var(--ink); }
+  .sub { color: var(--sub); font-size: 13px; }
+  h3 { font-size: 14px; color: var(--jade); letter-spacing: 3px; font-weight: 600;
+       margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .kv { display: flex; justify-content: space-between; font-size: 14px;
+        padding: 4px 0; color: #444; gap: 12px; }
+  .kv b { font-weight: 600; color: var(--ink); }
+  .bar-row { display: flex; align-items: center; gap: 8px; font-size: 12px;
+             color: var(--sub); margin: 2px 0; }
+  .bar-row .idx { width: 26px; text-align: right; flex: none; }
+  .bar { height: 13px; background: var(--jade-soft); border-radius: 3px; flex: none; }
+  .bar i { display: block; height: 100%; background: var(--jade); border-radius: 3px;
+           opacity: .75; }
+  .bar-row .len { width: 34px; flex: none; }
+  .bar-row .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+                  color: #999; }
+  ol.tips { padding-left: 22px; font-size: 14.5px; }
+  ol.tips li { margin: 8px 0; }
+  .kicker { font-size: 13.5px; color: var(--warn); }
+  footer { text-align: center; color: var(--sub); font-size: 12.5px;
+           margin-top: 40px; line-height: 2; }
+  footer a { color: var(--jade); text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>玉尺</h1>
+  <p class="epigraph">「仙人持玉尺，度君多少才。」<span>——旧题李白《上清宝鼎诗》</span></p>
+  <p class="lead">把一段中文贴进来，玉尺量它的呼吸。文章、帖子、AI 写的字，都行。<br>
+     量的是节奏，不是词表；给的是改法，不是形容词。</p>
+</header>
+
+<textarea id="text" placeholder="在这里粘贴文字……（两段以上更准）"></textarea>
+<div class="btns">
+  <button id="run">量　一　量</button>
+  <button class="ghost" id="demo">试一段示例</button>
+  <button class="ghost" id="copy" style="display:none">复制报告</button>
+</div>
+
+<div id="result"></div>
+
+<footer>
+  玉尺不测 AI 率，只量呼吸。检测率是检测器的事，写得像人，是写作的事。<br>
+  字句长短相间，读来才有气。
+</footer>
+
+</div>
+
+<script>
+/* ================= 分析器（与 yuchi.py v1 同源逻辑） ================= */
+const SENT_END = /(?<=[。！？；!?;])/;
+const CLAUSE_SPLIT = /[，、,；;]+/;
+const PUNCT = new Set(Array.from('，。！？；：、「」『』（）《》〈〉【】…—·～,.!?;:()"\'“”‘’ \t'));
+const GLUE_WORDS = ["一方面","另一方面","综上所述","值得注意的是","总而言之","总的来说",
+  "首先","其次","最后","此外","因此","然而","但是","而且","不容忽视","在当今","随着",
+  "让我们","值得一提的是","需要指出","可以说","无疑","显而易见","众所周知","与此同时","更重要的是"];
+const ENUM_WORDS = ["首先","其次","再次","最后，","第一，","第二，","第三，","其一","其二",
+  "一方面","另一方面","此外","与此同时","除此之外"];
+const SUM_WORDS = ["综上所述","总而言之","由此可见","总的来说","总之","让我们"];
+const STRUCT_ONLY = new Set([...GLUE_WORDS, ...ENUM_WORDS, ...SUM_WORDS]);
+const CONFIG = {
+  sent_cv: [0.45, 0.15], clause_cv: [0.55, 0.25], flat_run: [0.25, 0.60],
+  short_per200: [1.0, 0.2], glue_density: [1.0, 4.0], dash_density: [1.5, 4.0],
+  struct_score: [0.0, 3.0], para_cv: [0.50, 0.15],
+};
+const WEIGHTS = { rhythm: 0.40, density: 0.25, struct: 0.20, para: 0.15 };
+
+function hanzi(s) { let n = 0; for (const c of s) if (!PUNCT.has(c)) n++; return n; }
+function mean(a) { return a.reduce((x, y) => x + y, 0) / a.length; }
+function pstd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length); }
+function cv(a) { if (a.length < 2) return 0; const m = mean(a); return m ? pstd(a) / m : 0; }
+function soft(a, b, x) { if (a === b) return 1; return Math.max(0, Math.min(1, (x - b) / (a - b))); }
+function count(t, w) { return t.split(w).length - 1; }
+
+function splitParagraphs(text) {
+  return text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+}
+function splitSentences(paras) {
+  const out = [];
+  for (const p of paras) for (const line of p.split('\n')) {
+    const l = line.trim(); if (!l || l.startsWith('#')) continue;
+    for (const t of l.split(SENT_END)) if (t.trim()) out.push(t.trim());
+  }
+  return out;
+}
+function splitClauses(sents) {
+  const out = [];
+  for (const s of sents) for (let c of s.split(CLAUSE_SPLIT)) {
+    c = c.trim(); if (!c) continue;
+    const bare = c.replace(/[。！？；：、，,.;: ]/g, '');
+    if (STRUCT_ONLY.has(bare) && hanzi(c) <= 5) continue;
+    out.push(c);
+  }
+  return out;
+}
+function longestFlatRun(lens, spread = 8) {
+  const n = lens.length; if (n < 3) return [0, 0];
+  let bl = 0;
+  for (let i = 0; i < n; i++) {
+    let lo = lens[i], hi = lens[i], j = i;
+    while (j < n && Math.max(hi, lens[j]) - Math.min(lo, lens[j]) <= spread) {
+      hi = Math.max(hi, lens[j]); lo = Math.min(lo, lens[j]); j++;
+    }
+    if (j - i > bl) bl = j - i;
+  }
+  return [bl, bl / n];
+}
+
+function analyze(text) {
+  const paras = splitParagraphs(text);
+  const allText = paras.join('\n');
+  let sents = splitSentences(paras);
+  sents = sents.filter(s => hanzi(s) > 0);
+  const lens = sents.map(hanzi);
+  const clauses = splitClauses(sents);
+  const clens = clauses.map(hanzi).filter(n => n > 0);
+  const total = lens.reduce((a, b) => a + b, 0);
+  const r = { n: lens.length, lens, sents, total, nClause: clens.length, clens };
+
+  r.avg = lens.length ? mean(lens) : 0;
+  r.std = lens.length >= 2 ? pstd(lens) : 0;
+  r.cv = cv(lens);
+  r.max = lens.length ? Math.max(...lens) : 0;
+  r.min = lens.length ? Math.min(...lens) : 0;
+  r.clauseCv = cv(clens);
+  r.clauseAvg = clens.length ? mean(clens) : 0;
+  const [flatN, flatPct] = longestFlatRun(lens);
+  r.flatN = flatN; r.flatPct = flatPct;
+  r.shortCount = lens.filter(n => n <= 12).length;
+  r.shortPer200 = total ? r.shortCount / total * 200 : 0;
+
+  const glueHits = GLUE_WORDS.map(w => [w, count(allText, w)]).filter(x => x[1]);
+  const glueTotal = glueHits.reduce((s, x) => s + x[1], 0);
+  r.glueDensity = total ? glueTotal / total * 100 : 0;
+  r.glueHits = glueHits.sort((a, b) => b[1] - a[1]);
+
+  const enumN = ENUM_WORDS.reduce((s, w) => s + count(allText, w), 0);
+  const sumN = SUM_WORDS.reduce((s, w) => s + count(allText, w), 0);
+  r.enumN = enumN; r.sumN = sumN; r.structRaw = enumN + 2 * sumN;
+  r.struct = (enumN >= 2 && sumN >= 1) ? "总分总（清单式）"
+           : enumN >= 2 ? "清单式列举" : sumN >= 1 ? "结尾总结式" : "自然推进";
+
+  r.dash = count(allText, "——");
+  r.dashDensity = total ? r.dash / total * 100 : 0;
+  r.semi = count(allText, "；") + count(allText, ";");
+
+  const plens = paras.map(hanzi);
+  r.nPara = paras.length;
+  r.paraCv = plens.length >= 3 ? cv(plens) : null;
+
+  const sRhythm = 0.50 * soft(...CONFIG.sent_cv, r.cv)
+                + 0.30 * soft(...CONFIG.clause_cv, r.clauseCv)
+                + 0.20 * soft(CONFIG.flat_run[1], CONFIG.flat_run[0], r.flatPct);
+  const sDensity = 0.70 * soft(...CONFIG.glue_density, r.glueDensity)
+                 + 0.30 * soft(...CONFIG.dash_density, r.dashDensity);
+  const sStruct = soft(...CONFIG.struct_score, r.structRaw);
+  const sPara = r.paraCv !== null ? soft(...CONFIG.para_cv, r.paraCv) : 0.5;
+
+  r.score = Math.max(0, Math.min(100, Math.round(100 * (
+    WEIGHTS.rhythm * sRhythm + WEIGHTS.density * sDensity +
+    WEIGHTS.struct * sStruct + WEIGHTS.para * sPara))));
+  return r;
+}
+
+function verdict(score) {
+  if (score >= 80) return "「有气」——长短相间，读起来有呼吸。";
+  if (score >= 60) return "「气弱」——能读，但节奏偏平，缺短句的顿挫。";
+  if (score >= 40) return "「气滞」——句式均匀、套话偏多，有较重的机器感。";
+  return "「无气」——句句等长、连接词铺路，是典型的生成腔。";
+}
+
+function makeTips(r) {
+  const tips = [];
+  if (r.flatPct >= 0.4)
+    tips.push(`全篇有一段 ${r.flatN} 句的平滑区，长度变化不到 8 字。挑其中最长的两句动手：一句拆成两句，一句砍到十字以内。`);
+  if (r.cv < 0.30)
+    tips.push("大句长短太齐。在长句群中间安插短句，让读者有换气的地方。");
+  if (r.clauseCv < 0.35)
+    tips.push("句内的逗号也走得均匀。长句内部掺进三五个字的短顿，呼吸就有了起伏。");
+  if (r.glueDensity > 3)
+    tips.push("连接词在替读者铺路。「因此」「然而」删一半，因果交给语序，转折交给短句。");
+  if (r.structRaw >= 2)
+    tips.push(`结构的骨架露出来了（${r.struct}）。把「首先其次最后」拆掉，让每段接着上一段的意思往下走，而不是平铺开清单。`);
+  if (r.dashDensity > 1.5)
+    tips.push("破折号在替你做语气的活。留最重的一处，其余改成句号。");
+  if (r.shortPer200 < 0.8)
+    tips.push("短句太少。每 200 字安插一句十来个字的短句，让长句有落点。");
+  if (!tips.length)
+    tips.push("节奏健康。真要说：把最好的句子往前提一句，开头会更峻峭。");
+  return tips;
+}
+
+/* ================= 界面 ================= */
+const $ = (id) => document.getElementById(id);
+const DEMO = "在当今快速发展的现代社会中，人际关系的重要性正在日益凸显。一方面，良好的人际关系能够为我们提供重要的情感支持和实际帮助，让我们在困难时刻感受到温暖与力量。另一方面，不良的人际关系可能会给我们带来诸多困扰和精神压力，甚至影响到我们的身心健康和工作效率。值得注意的是，建立良好的人际关系需要我们在日常生活中持续投入时间和精力，这并不是一蹴而就的事情。首先，我们应该学会真诚地对待他人，以心换心，用真心去换取他人的信任与尊重。其次，我们需要掌握有效的沟通技巧，学会倾听他人的想法和感受，避免不必要的误解和冲突。最后，我们要保持积极乐观的心态，用正能量去感染身边的每一个人，营造和谐友善的氛围。综上所述，人际关系是一门需要终身学习的艺术，它既需要我们付出真诚的努力，也需要我们保持足够的耐心。让我们从今天开始，用心经营每一段关系，共同营造更加和谐美好的人际环境。";
+
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+
+function renderReport(r) {
+  const L = [];
+  L.push(`<div class="card">
+    <div class="score-row"><span class="score">${r.score}</span>
+      <span class="verdict">${verdict(r.score)}</span></div>
+    <div class="sub">大句 ${r.n} 句　平均 ${r.avg.toFixed(0)} 字　小句 ${r.nClause} 句</div>
+  </div>`);
+
+  L.push(`<div class="card"><h3>节 奏 层</h3>
+    <div class="kv"><span>大句变异系数</span><b>${r.cv.toFixed(2)}</b></div>
+    <div class="kv"><span>小句变异系数（句内呼吸）</span><b>${r.clauseCv.toFixed(2)}</b></div>
+    <div class="kv"><span>最长平滑段</span><b>${r.flatN} 句（占 ${(r.flatPct * 100).toFixed(0)}%）</b></div>
+    <div class="kv"><span>短句（≤12 字）</span><b>每 200 字 ${r.shortPer200.toFixed(1)} 句</b></div>
+    <h3>句 长 节 奏 图</h3>`);
+  const maxLen = Math.max(...r.lens, 1);
+  r.lens.forEach((n, i) => {
+    const w = Math.max(3, Math.round(n / maxLen * 300));
+    const s = (r.sents[i] || "").slice(0, 18);
+    L.push(`<div class="bar-row"><span class="idx">${i + 1}</span>
+      <span class="bar" style="width:${w}px"><i style="width:100%"></i></span>
+      <span class="len">${n}</span><span class="txt">${esc(s)}</span></div>`);
+  });
+  L.push(`</div>`);
+
+  L.push(`<div class="card"><h3>密 度 层</h3>
+    <div class="kv"><span>套话与连接词</span><b>${r.glueDensity.toFixed(1)} / 百字</b></div>
+    ${r.glueHits.length ? `<div class="sub">命中：${r.glueHits.slice(0, 8).map(x => `「${x[0]}」×${x[1]}`).join("　")}</div>` : ""}
+    <div class="kv"><span>破折号</span><b>${r.dash} 处（${r.dashDensity.toFixed(1)}/百字）</b></div>
+    <h3>结 构 层</h3>
+    <div class="kv"><span>列举词 ${r.enumN} 处　总结词 ${r.sumN} 处</span><b>${r.struct}</b></div>
+  </div>`);
+
+  if (r.paraCv !== null) {
+    L.push(`<div class="card"><h3>段 落 层</h3>
+      <div class="kv"><span>段落长度变异系数</span><b>${r.paraCv.toFixed(2)}</b></div>
+      <div class="sub">${r.nPara} 段。越参差越像人写。</div></div>`);
+  }
+
+  L.push(`<div class="card"><h3>改 法（落到句，不给形容词）</h3>
+    <ol class="tips">${makeTips(r).map(t => `<li>${esc(t)}</li>`).join("")}</ol></div>`);
+
+  L.push(`<p class="kicker">玉尺不测 AI 率，只量呼吸。以上是节奏诊断，不是检测报告。</p>`);
+  return L.join("");
+}
+
+function toTextReport(r, plain) {
+  const L = [];
+  L.push(`玉尺 · 文气诊断`);
+  L.push(`总评 ${r.score}/100 ${verdict(r.score)}`);
+  L.push(`大句 ${r.n} 句 平均 ${r.avg.toFixed(0)} 字 变异系数 ${r.cv.toFixed(2)}`);
+  L.push(`小句变异系数 ${r.clauseCv.toFixed(2)}　平滑段 ${r.flatN} 句（${(r.flatPct * 100).toFixed(0)}%）`);
+  L.push(`套话密度 ${r.glueDensity.toFixed(1)}/百字　结构：${r.struct}`);
+  L.push("改法：");
+  makeTips(r).forEach((t, i) => L.push(`${i + 1}. ${t}`));
+  return L.join("\n");
+}
+
+let lastReport = "";
+$("run").addEventListener("click", () => {
+  const t = $("text").value.trim();
+  if (!t) { $("text").focus(); return; }
+  const r = analyze(t);
+  let sents = splitSentences(splitParagraphs(t)).filter(s => hanzi(s) > 0);
+  r.sents = sents;
+  $("result").innerHTML = renderReport(r);
+  lastReport = toTextReport(r);
+  $("copy").style.display = "inline-block";
+});
+$("demo").addEventListener("click", () => {
+  $("text").value = DEMO;
+  $("run").click();
+});
+if (location.hash === "#demo") $("demo").click();
+$("copy").addEventListener("click", async () => {
+  if (!lastReport) return;
+  try { await navigator.clipboard.writeText(lastReport); $("copy").textContent = "已复制"; }
+  catch (e) { $("copy").textContent = "复制失败"; }
+  setTimeout(() => { $("copy").textContent = "复制报告"; }, 1500);
+});
+</script>
+</body>
+</html>
