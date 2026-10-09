@@ -48,7 +48,8 @@ def main():
         if not os.path.exists(os.path.join(HERE, rel)):
             errors.append(f"[缺件] {rel}")
 
-    docs = ["README.md", "SKILL.md"]
+    docs = ["README.md", "SKILL.md", "MAINTAINING.md", "CHANGELOG.md",
+            "提案-玉尺项目.md", "web/index.html"]
     if os.path.isdir(REFS):
         docs += [f"references/{f}" for f in sorted(os.listdir(REFS)) if f.endswith(".md")]
 
@@ -58,10 +59,12 @@ def main():
             continue
         raw = open(path, encoding="utf-8").read()
         stat = strip_quotes(raw)
-        for pat in AI_PATTERNS:
-            for i, line in enumerate(stat.splitlines(), 1):
-                if pat in line:
-                    errors.append(f"[AI腔/占位符] {rel}:{i} 命中「{pat}」")
+        # web/index.html 含词表定义与演示样本（功能性文本），只查红线词，不查 AI 腔
+        if rel != "web/index.html":
+            for pat in AI_PATTERNS:
+                for i, line in enumerate(stat.splitlines(), 1):
+                    if pat in line:
+                        errors.append(f"[AI腔/占位符] {rel}:{i} 命中「{pat}」")
         for pat in RED_WORDS:
             if pat in raw:
                 errors.append(f"[红线危险词] {rel} 命中「{pat}」")
