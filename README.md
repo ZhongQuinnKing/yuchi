@@ -5,6 +5,8 @@
 
 把一段文字贴进来，玉尺说出哪里读起来“不像人写的”，指到句子，告诉你怎么改。量的是节奏，不是词表。
 
+玉尺做两件事，同等对待：**把文章写好**，和**把诗写好**。文章与诗不分主次，各求各的领域最强。
+
 *English TL;DR — Yuchi (“jade ruler”) is a rhythm-based diagnostic for Chinese writing: sentence-length breathing, filler and cliché density, structure. It points at the exact sentences that read machine-like and shows how to fix them. Ships as CLI, a web page, and an AI skill pack. Chinese-first.*
 
 ## 这是什么
@@ -18,6 +20,8 @@
 - **段落层**：段落参差度
 
 量完给三样：分数（有气 / 气弱 / 气滞 / 无气）、问题定位、落到句子的改法。
+
+**作诗方向**（与写作同标准推进）：诗模式已能体检——贴一首诗，看行长呼吸、逐字平仄标注与读感（“连着四个仄声，念起来发紧”这类）；「景到诗」在建设中——把眼前的溪流与蓝天简单描绘，得到合心意的句子；近体诗、词、联、曲、赋各类型按批补齐。
 
 ## 三件套
 
