@@ -43,6 +43,13 @@ class TestProse(unittest.TestCase):
         a = yuchi.analyze("他说“值得注意的是，综上所述”。雨停了，院子里只剩水滴的声音。")
         self.assertEqual(a["glue_hits"], [])
 
+    def test_web_copy_hard_wrap_merged(self):
+        # 网页复制来的硬换行（行尾逗号）应与下一行并段
+        txt = ("这是一段文字，\n行尾是逗号，\n所以三行该并成一段。\n\n"
+               "第二段是完整的一句。\n")
+        r = yuchi.analyze(txt)
+        self.assertEqual(r["n_para"], 2)
+
     def test_good_prose_scores_high(self):
         r = yuchi.analyze("林子里安静。鸟叫了一声，又没了。他坐着，看光从叶缝里落下来，"
                           "一点点挪过脚背。后来起了风。他站起来，把帽子扣上，走了。")
