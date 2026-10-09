@@ -652,6 +652,45 @@ def render_lian(path, title):
     return "\n".join(out)
 
 
+# 人类参考样本的分数分布（升序，20 段真人语料；语料或阈值变动后跑 calibrate.py 重取）
+PERCENTILE_TABLE = [50, 53, 58, 63, 67, 68, 72, 76, 76, 79,
+                    81, 81, 83, 84, 86, 87, 87, 92, 92, 97]
+
+
+def percentile_of(score):
+    below = sum(1 for v in PERCENTILE_TABLE if v < score)
+    equal = sum(1 for v in PERCENTILE_TABLE if v == score)
+    return round((below + 0.5 * equal) / len(PERCENTILE_TABLE) * 100)
+
+
+def render_json(r):
+    out = {
+        "score": r["score"],
+        "percentile": percentile_of(r["score"]),
+        "verdict": verdict(r["score"]),
+        "layers": {
+            "rhythm": round(r["s_rhythm"], 3),
+            "density": round(r["s_density"], 3),
+            "struct": round(r["s_struct"], 3),
+            "para": round(r["s_para"], 3),
+        },
+        "metrics": {
+            "sents": r["n"], "avg_len": round(r["avg"], 1),
+            "sent_cv": round(r["cv"], 3), "clause_cv": round(r["clause_cv"], 3),
+            "flat_n": r["flat_n"], "flat_pct": round(r["flat_pct"], 3),
+            "short_per200": round(r["short_per200"], 2),
+            "glue_density": round(r["glue_density"], 2),
+            "vague_density": round(r["vague_density"], 2),
+            "dash": r["dash"], "struct_raw": r["struct_raw"], "struct": r["struct"],
+            "n_para": r["n_para"],
+            "para_cv": round(r["para_cv"], 3) if r["para_cv"] is not None else None,
+        },
+        "glue_hits": [{"word": w, "count": c} for w, c in r["glue_hits"]],
+        "sentences": [{"text": s, "len": n} for s, n in zip(r["sents"], r["lens"])],
+    }
+    return json.dumps(out, ensure_ascii=False, indent=2)
+
+
 def verdict(score):
     if score >= 80:
         return "「有气」——长短相间，读起来有呼吸。"
@@ -675,7 +714,8 @@ def render(path, title):
     out.append(f"玉尺 · 文气诊断：{title}")
     out.append("=" * 46)
     out.append("")
-    out.append(f"总评 {r['score']}/100　{verdict(r['score'])}")
+    out.append(f"总评 {r['score']}/100（约超过 {percentile_of(r['score'])}% 人类样本）"
+               f"　{verdict(r['score'])}")
     out.append("")
     out.append("【节奏层】")
     out.append(f"  大句 {r['n']} 句　平均 {r['avg']:.0f} 字　变异系数 {r['cv']:.2f}"
@@ -760,6 +800,9 @@ def main():
     lian = "--lian" in args
     if lian:
         args.remove("--lian")
+    json_out = "--json" in args
+    if json_out:
+        args.remove("--json")
     if not args and not ci:
         print(__doc__)
         sys.exit(1)
@@ -776,6 +819,13 @@ def main():
         print(render_lian(path, title))
     elif poem:
         print(render_poem(path, title))
+    elif json_out:
+        text = read_text(path)
+        if hanzi(text) < 50:
+            print(json.dumps({"error": "文本太短（不足五十个汉字），节奏量不出来"},
+                             ensure_ascii=False))
+        else:
+            print(render_json(analyze(text)))
     else:
         print(render(path, title))
 
