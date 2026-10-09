@@ -18,7 +18,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REFS = os.path.join(HERE, "references")
 
 REQUIRED = [
-    "README.md", "SKILL.md", "LICENSE", "CHANGELOG.md",
+    "README.md", "SKILL.md", "LICENSE", "LICENSE-CODE", "CHANGELOG.md", "MAINTAINING.md",
     "web/index.html", "yuchi.py",
     "references/01-节奏.md", "references/02-密度.md", "references/03-结构.md",
     "references/04-具体.md", "references/05-改稿流程.md", "references/06-自检清单.md",
