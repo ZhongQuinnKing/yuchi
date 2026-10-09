@@ -8721,6 +8721,12 @@ $("run").addEventListener("click", () => {
     $("result").innerHTML = renderPoemReport(r);
     lastReport = toPoemText(r);
   } else {
+    if (hanzi(t) < 50) {
+      $("result").innerHTML = `<div class="card"><p class="sub">文本太短（不足五十个汉字），节奏量不出来——多写几段再量。</p></div>`;
+      lastReport = "";
+      $("copy").style.display = "none";
+      return;
+    }
     const r = analyze(t);
     $("result").innerHTML = renderReport(r);
     lastReport = toTextReport(r);
