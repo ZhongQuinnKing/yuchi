@@ -134,7 +134,7 @@ const CONFIG = {
 };
 const WEIGHTS = { rhythm: 0.40, density: 0.25, struct: 0.20, para: 0.15 };
 
-function hanzi(s) { let n = 0; for (const c of s) if (!PUNCT.has(c)) n++; return n; }
+function hanzi(s) { let n = 0; for (const c of s) if (c >= "一" && c <= "鿿") n++; return n; }
 function mean(a) { return a.reduce((x, y) => x + y, 0) / a.length; }
 function pstd(a) { const m = mean(a); return Math.sqrt(a.reduce((s, x) => s + (x - m) * (x - m), 0) / a.length); }
 function cv(a) { if (a.length < 2) return 0; const m = mean(a); return m ? pstd(a) / m : 0; }
@@ -8624,8 +8624,8 @@ function toPoemText(r) {
 }
 
 /* 人类参考样本的分数分布（与命令行端同一张表，语料或阈值变动后两边同换） */
-const PERCENTILE_TABLE = [50, 53, 58, 63, 67, 68, 72, 76, 76, 79,
-                          81, 81, 83, 84, 86, 87, 87, 92, 92, 97];
+const PERCENTILE_TABLE = [53, 54, 58, 58, 66, 71, 72, 74, 75, 76,
+                          77, 79, 79, 79, 80, 86, 87, 92, 92, 97];
 function percentileOf(score) {
   const below = PERCENTILE_TABLE.filter(v => v < score).length;
   const equal = PERCENTILE_TABLE.filter(v => v === score).length;

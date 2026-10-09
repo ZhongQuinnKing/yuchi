@@ -1,0 +1,4 @@
+# 用途：边界样本·中英混排（英文标点不该被当中文句读）
+We deliver design systems. 我们做的是设计系统。
+The key insight is simple: 节奏比词汇重要，structure beats vocabulary。
+工具选型上，CLI 优先于 GUI，OpenCLI 的桥接层是核心。

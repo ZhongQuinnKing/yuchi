@@ -70,7 +70,8 @@ WEIGHTS = {"rhythm": 0.40, "density": 0.25, "struct": 0.20, "para": 0.15}
 
 
 def hanzi(s):
-    return len([c for c in s if c not in PUNCT])
+    """数汉字（标点、数字、英文字母都不计）。"""
+    return sum(1 for c in s if "一" <= c <= "鿿")
 
 
 def read_text(path):
@@ -653,8 +654,8 @@ def render_lian(path, title):
 
 
 # 人类参考样本的分数分布（升序，20 段真人语料；语料或阈值变动后跑 calibrate.py 重取）
-PERCENTILE_TABLE = [50, 53, 58, 63, 67, 68, 72, 76, 76, 79,
-                    81, 81, 83, 84, 86, 87, 87, 92, 92, 97]
+PERCENTILE_TABLE = [53, 54, 58, 58, 66, 71, 72, 74, 75, 76,
+                    77, 79, 79, 79, 80, 86, 87, 92, 92, 97]
 
 
 def percentile_of(score):
