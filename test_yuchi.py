@@ -153,6 +153,39 @@ class TestQu(unittest.TestCase):
         self.assertEqual(yuchi.qu_tone_of("说")[0], "通")   # 多音
 
 
+class TestFuAndHtml(unittest.TestCase):
+    def test_fu_report(self):
+        # 《前赤壁赋》风格节选：骈句报数与句末韵部（赋模式回归）
+        t = "壬戌之秋\n七月既望\n苏子与客泛舟游于赤壁之下\n清风徐来\n水波不兴\n"
+        p = _tmp(t)
+        try:
+            out = yuchi.render_fu(p, "赋")
+            self.assertIn("骈句报数", out)
+            self.assertIn("四字句", out)
+            self.assertIn("第 1 句尾「秋」：十一尤", out)
+            self.assertIn("不装懂", out)
+        finally:
+            os.unlink(p)
+
+    def test_html_report_prose(self):
+        t = ("雨停在半空。瓦片亮了一下，巷子深处的猫叫拖得很长。我把伞收起来，又撑开，"
+             "像一句没说出口的话。后来天黑了，灯一盏一盏亮起来，风从窗缝里挤进来。"
+             "我坐了许久，听着檐下滴水，一滴，又一滴。")
+        r = yuchi.analyze(t)
+        h = yuchi.render_html(r, "测试")
+        self.assertIn("<!DOCTYPE html>", h)
+        self.assertIn("</html>", h)
+        self.assertIn("玉尺 · 文气诊断", h)
+        self.assertIn(str(r["score"]), h)
+
+    def test_html_report_structured(self):
+        t = ("一、会议时间\n2026 年 10 月 1 日\n二、参会人员\n张三、李四\n"
+             "三、会议内容\n讨论了排期与分工。\n四、待办\n1. 跟进排期\n2. 整理纪要")
+        r = yuchi.analyze(t)
+        h = yuchi.render_html(r, "纪要")
+        self.assertIn("文体识别", h)
+
+
 class TestRegulatedAndCiLian(unittest.TestCase):
     def test_regulated_detection(self):
         self.assertTrue(yuchi.is_regulated([7, 7, 7, 7]))
