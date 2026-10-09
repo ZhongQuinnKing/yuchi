@@ -107,6 +107,10 @@ const GLUE_WORDS = ["一方面","另一方面","综上所述","值得注意的�
 const ENUM_WORDS = ["首先","其次","再次","最后，","第一，","第二，","第三，","其一","其二",
   "一方面","另一方面","此外","与此同时","除此之外"];
 const SUM_WORDS = ["综上所述","总而言之","由此可见","总的来说","总之","让我们"];
+/* 虚词与空夸词：程度副词、空动词、无刻度的夸赞 */
+const VAGUE_WORDS = ["非常","十分","极其","相当","格外","尤为","堪称","备受","深受",
+  "无比","深深","大大","充分","高度","至关重要","意义重大",
+  "进一步提升","全面优化","不断完善","显著提升","有效改善"];
 const STRUCT_ONLY = new Set([...GLUE_WORDS, ...ENUM_WORDS, ...SUM_WORDS]);
 /* 统计词频前先剥离引文：成对引号（含直引号）与 markdown 引用块行 */
 const QUOTE_STRIP = /[“][^“”]*[”]|[「][^「」]*[」]|[『][^『』]*[』]|["][^"]{1,120}["]/g;
@@ -114,6 +118,7 @@ const QUOTE_BLOCK = /^[ \t]*> .*$/gm;
 const CONFIG = {
   sent_cv: [0.45, 0.15], clause_cv: [0.55, 0.25], flat_run: [0.25, 0.60],
   short_per200: [1.0, 0.2], glue_density: [1.0, 4.0], dash_density: [1.5, 4.0],
+  vague_density: [0.3, 1.2],
   struct_score: [0.0, 3.0], para_cv: [0.50, 0.15],
 };
 const WEIGHTS = { rhythm: 0.40, density: 0.25, struct: 0.20, para: 0.15 };
@@ -188,6 +193,9 @@ function analyze(text) {
   r.glueDensity = total ? glueTotal / total * 100 : 0;
   r.glueHits = glueHits.sort((a, b) => b[1] - a[1]);
 
+  const vagueTotal = VAGUE_WORDS.reduce((s, w) => s + count(statText, w), 0);
+  r.vagueDensity = total ? vagueTotal / total * 100 : 0;
+
   const enumN = ENUM_WORDS.reduce((s, w) => s + count(statText, w), 0);
   const sumN = SUM_WORDS.reduce((s, w) => s + count(statText, w), 0);
   r.enumN = enumN; r.sumN = sumN; r.structRaw = enumN + 2 * sumN;
@@ -205,8 +213,9 @@ function analyze(text) {
   const sRhythm = 0.50 * soft(...CONFIG.sent_cv, r.cv)
                 + 0.30 * soft(...CONFIG.clause_cv, r.clauseCv)
                 + 0.20 * soft(CONFIG.flat_run[1], CONFIG.flat_run[0], r.flatPct);
-  const sDensity = 0.70 * soft(...CONFIG.glue_density, r.glueDensity)
-                 + 0.30 * soft(...CONFIG.dash_density, r.dashDensity);
+  const sDensity = 0.45 * soft(...CONFIG.glue_density, r.glueDensity)
+                 + 0.20 * soft(...CONFIG.dash_density, r.dashDensity)
+                 + 0.35 * soft(...CONFIG.vague_density, r.vagueDensity);
   const sStruct = soft(...CONFIG.struct_score, r.structRaw);
   const sPara = r.paraCv !== null ? soft(...CONFIG.para_cv, r.paraCv) : 0.5;
 
@@ -278,6 +287,7 @@ function renderReport(r) {
     <div class="kv"><span>套话与连接词</span><b>${r.glueDensity.toFixed(1)} / 百字</b></div>
     ${r.glueHits.length ? `<div class="sub">命中：${r.glueHits.slice(0, 8).map(x => `「${x[0]}」×${x[1]}`).join("　")}</div>` : ""}
     <div class="kv"><span>破折号</span><b>${r.dash} 处（${r.dashDensity.toFixed(1)}/百字）</b></div>
+    <div class="kv"><span>虚词与空夸词</span><b>${r.vagueDensity.toFixed(1)} / 百字</b></div>
     <h3>结 构 层</h3>
     <div class="kv"><span>列举词 ${r.enumN} 处　总结词 ${r.sumN} 处</span><b>${r.struct}</b></div>
   </div>`);
