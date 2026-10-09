@@ -9,7 +9,7 @@
 五层指标：大句节奏 / 小句呼吸 / 密度 / 结构 / 段落。
 阈值集中在 CONFIG，用 calibrate.py 按语料校准（当前为先验值）。
 用法：
-    python3 yuchi.py <文件路径> [--title 标题]
+    python3 yuchi.py <文件路径> [--title 标题] [--poem]（--poem 走诗模式）
     echo "文本" | python3 yuchi.py -
 零依赖，纯标准库。
 """
@@ -224,6 +224,95 @@ def analyze(text):
     return r
 
 
+# ================= 诗模式 =================
+# 诗按行读：行就是它的句子。诗模式给“体检单”为主、不打总分——
+# 诗的评判太主观，尺子只报数，判断留给读者。
+
+def analyze_poem(text):
+    lines = [l.strip() for l in text.split("\n")
+             if l.strip() and not l.strip().startswith("#")]
+    lens = [hanzi(l) for l in lines]
+    pairs = [(l, n) for l, n in zip(lines, lens) if n > 0]
+    lines = [p[0] for p in pairs]
+    lens = [p[1] for p in pairs]
+
+    r = {"n": len(lens), "lens": lens, "lines": lines}
+    r["avg"] = statistics.mean(lens) if lens else 0
+    r["cv"] = cv(lens)
+    r["max"] = max(lens) if lens else 0
+    r["min"] = min(lens) if lens else 0
+
+    flat_run, cur = 1, 1
+    for i in range(1, len(lens)):
+        cur = cur + 1 if abs(lens[i] - lens[i - 1]) <= 1 else 1
+        flat_run = max(flat_run, cur)
+    r["flat_run"] = flat_run if lens else 0
+
+    r["short"] = sum(1 for n in lens if n <= 6)
+
+    tails = []
+    for l in lines:
+        s = l.rstrip("，。！？；：、,.!?;:…— ")
+        if s:
+            tails.append(s[-1])
+    r["tails"] = tails
+    r["adj_rep"] = sum(1 for i in range(1, len(tails)) if tails[i] == tails[i - 1])
+
+    sections = []
+    for sec in re.split(r"\n\s*\n", text):
+        n = len([l for l in sec.split("\n")
+                 if l.strip() and not l.strip().startswith("#")])
+        if n:
+            sections.append(n)
+    r["sections"] = sections
+
+    issues = []
+    if r["flat_run"] >= 3:
+        issues.append(f"连续 {r['flat_run']} 行长度几乎一样，像豆腐块。"
+                      "挑一行动手：要么砍掉一半，要么拉长。")
+    if r["n"] >= 5 and r["cv"] < 0.28:
+        issues.append("行长太平，全诗缺少起伏。自由诗的自由，一半在行长上。")
+    if r["adj_rep"] >= 2:
+        issues.append(f"有 {r['adj_rep']} 处相邻行行尾同字，读起来像打嗝；"
+                      "除非是刻意的复沓，改掉。")
+    if r["n"] >= 6 and r["short"] == 0:
+        issues.append("没有一行短过七字。给诗留几口气短的。")
+    r["issues"] = issues
+    return r
+
+
+def render_poem(path, title):
+    text = open(path, encoding="utf-8").read()
+    r = analyze_poem(text)
+    out = []
+    out.append(f"玉尺 · 诗诊：{title}")
+    out.append("=" * 46)
+    out.append("")
+    out.append(f"行数 {r['n']}　节 {len(r['sections'])}（各节行数 {'/'.join(map(str, r['sections']))}）")
+    out.append(f"平均行长 {r['avg']:.0f} 字　变异系数 {r['cv']:.2f}"
+               f"　最长 {r['max']} / 最短 {r['min']}　短行（≤6 字）{r['short']} 行")
+    out.append("")
+    out.append("行长图（每格 1 字）")
+    out.append("-" * 46)
+    for i, (l, n) in enumerate(zip(r["lines"], r["lens"]), 1):
+        head = l[:20] + ("…" if len(l) > 20 else "")
+        out.append(f"{i:>2} {bar(n, scale=1):<40} {n:>3}  {head}")
+    out.append("-" * 46)
+    out.append("")
+    out.append(f"行尾：{'／'.join(r['tails'])}")
+    out.append(f"相邻同尾 {r['adj_rep']} 处")
+    out.append("")
+    out.append("体检（诗的判断留给你，尺子只报数）")
+    out.append("-" * 46)
+    if r["issues"]:
+        for i, t in enumerate(r["issues"], 1):
+            out.append(f"{i}. {t}")
+    else:
+        out.append("没查出明显的问题。真要说：把最重的那一行往前提一提，看看气顺不顺。")
+    out.append("")
+    return "\n".join(out)
+
+
 def verdict(score):
     if score >= 80:
         return "「有气」——长短相间，读起来有呼吸。"
@@ -319,13 +408,16 @@ def main():
         i = args.index("--title")
         title = args[i + 1]
         del args[i:i + 2]
+    poem = "--poem" in args
+    if poem:
+        args.remove("--poem")
     path = args[0]
     if path == "-":
         text = sys.stdin.read()
         tmp = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".stdin_tmp.txt")
         open(tmp, "w", encoding="utf-8").write(text)
         path = tmp
-    print(render(path, title))
+    print(render_poem(path, title) if poem else render(path, title))
 
 
 if __name__ == "__main__":
