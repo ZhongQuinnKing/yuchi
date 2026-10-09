@@ -654,6 +654,8 @@ def bar(n, scale=2, cap=40):
 
 def render(path, title):
     text = open(path, encoding="utf-8").read()
+    if hanzi(text) < 50:
+        return "文本太短（不足五十个汉字），节奏量不出来——多写几段再量。"
     r = analyze(text)
     out = []
     out.append(f"玉尺 · 文气诊断：{title}")
