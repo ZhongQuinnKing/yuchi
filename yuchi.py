@@ -73,10 +73,23 @@ def hanzi(s):
     return len([c for c in s if c not in PUNCT])
 
 
+PARA_END = set("。！？；…”’」』）)")
+
+
 def split_paragraphs(text):
-    # 中文写作与粘贴场景中，一行即一段；# 开头行视为注释（语料文件头）。
-    return [l.strip() for l in text.split("\n")
-            if l.strip() and not l.strip().startswith("#")]
+    # 一行即一段；但行尾没有句末标点的行与下一行接续——
+    # 网页复制来的硬换行（同一段被折成多行）不该被数成多个段落。
+    lines = [l.strip() for l in text.split("\n")
+             if l.strip() and not l.strip().startswith("#")]
+    paras, buf = [], ""
+    for l in lines:
+        buf = buf + l if buf else l
+        if l[-1] in PARA_END:
+            paras.append(buf)
+            buf = ""
+    if buf:
+        paras.append(buf)
+    return paras
 
 
 def split_sentences(paras):

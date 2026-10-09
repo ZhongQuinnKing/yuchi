@@ -141,8 +141,18 @@ function cv(a) { if (a.length < 2) return 0; const m = mean(a); return m ? pstd(
 function soft(a, b, x) { if (a === b) return 1; return Math.max(0, Math.min(1, (x - b) / (a - b))); }
 function count(t, w) { return t.split(w).length - 1; }
 
+const PARA_END = new Set(['。','！','？','；','…','”','’','」','』','）',')']);
 function splitParagraphs(text) {
-  return text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  /* 一行即一段；行尾无句末标点的行与下一行接续（网页复制硬换行不算多段） */
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const paras = [];
+  let buf = '';
+  for (const l of lines) {
+    buf = buf ? buf + l : l;
+    if (PARA_END.has(Array.from(l).pop())) { paras.push(buf); buf = ''; }
+  }
+  if (buf) paras.push(buf);
+  return paras;
 }
 function splitSentences(paras) {
   const out = [];
