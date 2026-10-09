@@ -67,6 +67,19 @@ class TestProse(unittest.TestCase):
         finally:
             os.unlink(p)
 
+    def test_batch_table(self):
+        p1 = _tmp("林子里安静。鸟叫了一声，又没了。他坐着，看光从叶缝里落下来，"
+                  "一点点挪过脚背。后来起了风。他站起来，把帽子扣上，走了。")
+        p2 = _tmp("他在当今社会中高度重视此项工作的重要性。首先，值得注意。"
+                  "其次，综上所述。此外，让我们共同努力。")
+        try:
+            out = yuchi.render_batch([p1, p2])
+            self.assertIn("分数", out)
+            self.assertIn("结构", out)
+        finally:
+            os.unlink(p1)
+            os.unlink(p2)
+
     def test_good_prose_scores_high(self):
         r = yuchi.analyze("林子里安静。鸟叫了一声，又没了。他坐着，看光从叶缝里落下来，"
                           "一点点挪过脚背。后来起了风。他站起来，把帽子扣上，走了。")

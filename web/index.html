@@ -8673,6 +8673,7 @@ function renderReport(r) {
       <span class="verdict">${verdict(r.score)}</span></div>
     <div class="sub">约超过 ${percentileOf(r.score)}% 的人类样本（按当前参考语料）</div>
     <div class="sub">大句 ${r.n} 句　平均 ${r.avg.toFixed(0)} 字　小句 ${r.nClause} 句</div>
+    ${r.smallSample ? '<div class="sub" style="color:#a4553f">样本量偏小（不足百字），分数只作参考</div>' : ''}
   </div>`);
 
   L.push(`<div class="card"><h3>节 奏 层</h3>
@@ -8748,6 +8749,7 @@ $("run").addEventListener("click", () => {
       return;
     }
     const r = analyze(t);
+    r.smallSample = hanzi(t) < 100;
     $("result").innerHTML = renderReport(r);
     lastReport = toTextReport(r);
   }

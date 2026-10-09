@@ -692,6 +692,31 @@ def render_json(r):
     return json.dumps(out, ensure_ascii=False, indent=2)
 
 
+def render_batch(files):
+    """批量对照表：多文件一屏对照（改前/改后最常用）。"""
+    heads = ("文件", "分数", "句数", "大句CV", "套话/百字", "结构")
+    rows = []
+    for f in files:
+        try:
+            r = analyze(read_text(f))
+            rows.append((os.path.basename(f), str(r["score"]), str(r["n"]),
+                         f"{r['cv']:.2f}", f"{r['glue_density']:.1f}", r["struct"]))
+        except Exception:
+            rows.append((os.path.basename(f), "读取失败", "—", "—", "—", "—"))
+
+    def w(s):
+        return sum(2 if "一" <= c <= "鿿" else 1 for c in str(s))
+
+    widths = [max([w(heads[i])] + [w(r[i]) for r in rows]) for i in range(len(heads))]
+
+    def fmt(row):
+        return "  ".join(str(c) + " " * (widths[i] - w(c)) for i, c in enumerate(row))
+
+    lines = [fmt(heads), "-" * (sum(widths) + 2 * (len(widths) - 1))]
+    lines += [fmt(r) for r in rows]
+    return "\n".join(lines)
+
+
 def verdict(score):
     if score >= 80:
         return "「有气」——长短相间，读起来有呼吸。"
@@ -708,8 +733,10 @@ def bar(n, scale=2, cap=40):
 
 def render(path, title):
     text = read_text(path)
-    if hanzi(text) < 50:
+    n_hz = hanzi(text)
+    if n_hz < 50:
         return "文本太短（不足五十个汉字），节奏量不出来——多写几段再量。"
+    small_sample = n_hz < 100
     r = analyze(text)
     out = []
     out.append(f"玉尺 · 文气诊断：{title}")
@@ -717,6 +744,8 @@ def render(path, title):
     out.append("")
     out.append(f"总评 {r['score']}/100（约超过 {percentile_of(r['score'])}% 人类样本）"
                f"　{verdict(r['score'])}")
+    if small_sample:
+        out.append("（样本量偏小——不足百字，分数只作参考）")
     out.append("")
     out.append("【节奏层】")
     out.append(f"  大句 {r['n']} 句　平均 {r['avg']:.0f} 字　变异系数 {r['cv']:.2f}"
@@ -814,6 +843,17 @@ def main():
         with open(tmp, "w", encoding="utf-8") as f:
             f.write(text)
         path = tmp
+    if "--batch" in args:
+        args.remove("--batch")
+        targets = []
+        for a in args:
+            if os.path.isdir(a):
+                targets += [os.path.join(a, x) for x in sorted(os.listdir(a))
+                            if x.endswith(".txt") and not x.startswith("_")]
+            elif a:
+                targets.append(a)
+        print(render_batch(targets))
+        return
     if ci:
         print(render_ci(path, title, ci))
     elif lian:
