@@ -11,8 +11,8 @@ const html = fs.readFileSync(path.join(here, 'web', 'index.html'), 'utf8');
 const m = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!m) { console.error('未找到 script'); process.exit(1); }
 const code = m[1].split('/* ================= 界面 ================= */')[0];
-const fn = new Function(code + '\nreturn { analyze, analyzePoem };');
-const { analyze, analyzePoem } = fn();
+const fn = new Function(code + '\nreturn { analyze, analyzePoem, poemRhymes };');
+const { analyze, analyzePoem, poemRhymes } = fn();
 
 function load(p) {
   return fs.readFileSync(path.join(here, p), 'utf8')
@@ -52,11 +52,19 @@ for (const f of POEMS) {
   if (!same) allOk = false;
 }
 
-console.log('\n── 近体诗：py 平仄标注与韵脚冒烟 ──');
-const shi = py('"samples/shi_qijue.txt" --poem');
-const shiOk = shi.includes('平仄标注') && shi.includes('韵脚');
-console.log(`samples/shi_qijue.txt  ${shiOk ? '✓ 平仄与韵脚已在' : '✗'}`);
-if (!shiOk) allOk = false;
+console.log('\n── 近体诗：JS vs Python（韵脚逐句硬比对）──');
+for (const f of ['samples/shi_qijue.txt', 'samples/shi_qijue_punct.txt']) {
+  const js = analyzePoem(load(f));
+  const t = py(`"${f}" --poem`);
+  const pyRows = [...t.matchAll(/第 (\d+) 句尾「(.)」：(.+)/g)]
+    .map(m => ({ i: Number(m[1]), ch: m[2], yun: m[3].trim() }));
+  const jsRows = poemRhymes(js).rows;
+  const same = pyRows.length === jsRows.length && pyRows.every((p, k) =>
+    p.i === jsRows[k].i && p.ch === jsRows[k].ch && p.yun === jsRows[k].yun);
+  const show = rows => rows.map(x => `${x.ch}→${x.yun}`).join(' ');
+  console.log(`${f}\tJS ${show(jsRows)}  PY ${show(pyRows)}\t${same ? '✓' : '✗ 不一致'}`);
+  if (!same) allOk = false;
+}
 
 console.log('\n── 纯英文：py 太短保护 ──');
 const en = JSON.parse(py('"samples/s_edge_english.txt" --json'));

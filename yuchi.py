@@ -400,7 +400,7 @@ def render_poem(path, title):
     extra_notes = []
     if is_regulated(r["lens"]):
         seqs = annotate_tones(r["lines"])
-        out.append("平仄标注（平／仄／通＝多音；？＝韵表未收）")
+        out.append("平仄标注（平／仄／通＝多音；？＝平仄表未收）")
         out.append("-" * 46)
         for i, (l, seq) in enumerate(zip(r["lines"], seqs), 1):
             out.append(f"{i:>2} {seq}  {l}")
@@ -411,7 +411,7 @@ def render_poem(path, title):
         rhyme_idx = load_rhyme_index()
         yun_list = []
         for i in range(2, len(r["lines"]) + 1, 2):
-            lastch = r["lines"][i - 1][-1]
+            lastch = r["tails"][i - 1]  # 用去标点后的行尾（直接取原行末字符会取到句号）
             yuns = sorted(rhyme_idx.get(lastch, []))
             yun_list.append((i, lastch, "／".join(yuns) if yuns else "韵表未收"))
         out.append("韵脚（偶数句）")
