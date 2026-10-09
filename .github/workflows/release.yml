@@ -1,0 +1,33 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 内容门禁（发版前过闸）
+        # 隐私闸是本机职责（词表不出本机），CI 里没有这一步
+        run: |
+          python3 check.py
+          python3 check_typos.py || true
+          node test_web.js
+
+      - name: 打包（英文 asset 名——gh 会吞中文文件名）
+        run: |
+          python3 make_release_zip.py "${GITHUB_REF_NAME}" -o "yuchi-${GITHUB_REF_NAME}.zip"
+          ls -la *.zip
+
+      - name: 发 GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" yuchi-*.zip \
+            --title "${GITHUB_REF_NAME}" --generate-notes
