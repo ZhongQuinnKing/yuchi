@@ -19,7 +19,8 @@ OUT = os.path.join(HERE, "samples", "ai_real")
 
 BASE = os.environ["ANTHROPIC_BASE_URL"].rstrip("/")
 TOKEN = os.environ["ANTHROPIC_AUTH_TOKEN"]
-MODEL = os.environ["ANTHROPIC_MODEL"]
+# 默认用环境配置的模型；复量别的模型：YUCHI_SAMPLE_MODEL=xxx python3 本脚本 general c_
+MODEL = os.environ.get("YUCHI_SAMPLE_MODEL") or os.environ["ANTHROPIC_MODEL"]
 
 SETS = {
     # 通用主题：散文/记叙/议论/书评/商业文案/写人 —— 普通人会让 AI 写的文章
@@ -80,6 +81,8 @@ def main() -> int:
         print(f"组名须为 {'/'.join(SETS)}")
         return 1
     prefix, prompts = SETS[which]
+    if len(sys.argv) > 2:  # 可选覆盖文件名前缀（复量别的模型时区分）
+        prefix = sys.argv[2]
     os.makedirs(OUT, exist_ok=True)
     ok = 0
     for i, p in enumerate(prompts, 1):
