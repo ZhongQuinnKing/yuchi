@@ -9,8 +9,8 @@ const html = fs.readFileSync(path.join(here, 'web', 'index.html'), 'utf8');
 const m = html.match(/<script>([\s\S]*?)<\/script>/);
 if (!m) { console.error('未找到 script'); process.exit(1); }
 const code = m[1].split('/* ================= 界面 ================= */')[0];
-const fn = new Function(code + '\nreturn { analyze };');
-const { analyze } = fn();
+const fn = new Function(code + '\nreturn { analyze, analyzePoem };');
+const { analyze, analyzePoem } = fn();
 
 function load(p) {
   return fs.readFileSync(path.join(here, p), 'utf8')
@@ -27,4 +27,10 @@ for (const f of files) {
   const r = analyze(load(f));
   console.log(`${f}\t分数 ${r.score}\t句数 ${r.n}\t大句CV ${r.cv.toFixed(2)}` +
               `\t小句CV ${r.clauseCv.toFixed(2)}\t平滑段 ${r.flatN}\t结构 ${r.struct}`);
+}
+console.log();
+for (const f of ['samples/poem_good.txt', 'samples/poem_flat.txt']) {
+  const r = analyzePoem(load(f));
+  console.log(`${f}\t行数 ${r.n}\t节 ${r.sections.length}\tCV ${r.cv.toFixed(2)}` +
+              `\t豆腐块 ${r.flatRun}\t体检 ${r.issues.length} 项`);
 }

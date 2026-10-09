@@ -30,6 +30,12 @@
     resize: vertical; outline: none;
   }
   textarea:focus { border-color: var(--jade); }
+  .mode-switch { display: flex; margin-bottom: 12px; }
+  .mode { border: 1px solid var(--jade); background: transparent; color: var(--jade);
+          border-radius: 0; font-size: 14px; letter-spacing: 1px; padding: 8px 22px; }
+  .mode:first-child { border-radius: 8px 0 0 8px; }
+  .mode:last-child { border-radius: 0 8px 8px 0; border-left: none; }
+  .mode.on { background: var(--jade); color: #fff; }
   .btns { display: flex; gap: 12px; margin-top: 14px; flex-wrap: wrap; }
   button {
     padding: 11px 26px; font-size: 15px; border-radius: 10px; cursor: pointer;
@@ -80,7 +86,11 @@
      量的是节奏，不是词表；给的是改法，不是形容词。</p>
 </header>
 
-<textarea id="text" placeholder="在这里粘贴文字……（两段以上更准）"></textarea>
+<div class="mode-switch">
+  <button class="mode on" data-mode="prose">文章</button>
+  <button class="mode" data-mode="poem">诗</button>
+</div>
+<textarea id="text" placeholder="在这里粘贴文字……（文章：两段以上更准；诗：一行一句）"></textarea>
 <div class="btns">
   <button id="run">量　一　量</button>
   <button class="ghost" id="demo">试一段示例</button>
@@ -229,6 +239,102 @@ function analyze(text) {
   return r;
 }
 
+/* 诗模式：诗按行读。体检为主、不打总分——诗的好坏留给作者。 */
+function analyzePoem(text) {
+  const raw = text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const pairs = [];
+  for (const l of raw) { const n = hanzi(l); if (n > 0) pairs.push([l, n]); }
+  const lines = pairs.map(p => p[0]);
+  const lens = pairs.map(p => p[1]);
+  const r = { n: lens.length, lens, lines };
+  r.avg = lens.length ? mean(lens) : 0;
+  r.cv = cv(lens);
+  r.max = lens.length ? Math.max(...lens) : 0;
+  r.min = lens.length ? Math.min(...lens) : 0;
+
+  r.flatRun = 0;
+  if (lens.length) {
+    let cur = 1, best = 1;
+    for (let i = 1; i < lens.length; i++) {
+      cur = Math.abs(lens[i] - lens[i - 1]) <= 1 ? cur + 1 : 1;
+      best = Math.max(best, cur);
+    }
+    r.flatRun = best;
+  }
+  r.shortN = lens.filter(n => n <= 6).length;
+
+  const tails = [];
+  for (const l of lines) {
+    const s = l.replace(/[，。！？；：、,.!?;:…—\s]+$/g, '');
+    if (s) tails.push(Array.from(s).pop());
+  }
+  r.tails = tails;
+  r.adjRep = 0;
+  for (let i = 1; i < tails.length; i++) if (tails[i] === tails[i - 1]) r.adjRep++;
+
+  const sections = [];
+  for (const sec of text.split(/\n\s*\n/)) {
+    const n = sec.split('\n').filter(l => l.trim() && !l.trim().startsWith('#')).length;
+    if (n) sections.push(n);
+  }
+  r.sections = sections;
+
+  const issues = [];
+  if (r.flatRun >= 3)
+    issues.push(`连续 ${r.flatRun} 行长度几乎一样，像豆腐块。挑一行动手：要么砍掉一半，要么拉长。`);
+  if (r.n >= 5 && r.cv < 0.28)
+    issues.push("行长太平，全诗缺少起伏。自由诗的自由，一半在行长上。");
+  if (r.adjRep >= 2)
+    issues.push(`有 ${r.adjRep} 处相邻行行尾同字，读起来像打嗝；除非是刻意的复沓，改掉。`);
+  if (r.n >= 6 && r.shortN === 0)
+    issues.push("没有一行短过七字。给诗留几口气短的。");
+  r.issues = issues;
+  return r;
+}
+
+function renderPoemReport(r) {
+  const L = [];
+  L.push(`<div class="card">
+    <div class="score-row"><span class="score" style="font-size:34px">诗诊</span></div>
+    <div class="kv"><span>行数</span><b>${r.n}　节 ${r.sections.length}（各节 ${r.sections.join('/')} 行）</b></div>
+    <div class="kv"><span>平均行长</span><b>${r.avg.toFixed(0)} 字</b></div>
+    <div class="kv"><span>行长变异系数</span><b>${r.cv.toFixed(2)}</b></div>
+    <div class="kv"><span>最长 / 最短</span><b>${r.max} / ${r.min}</b></div>
+    <div class="kv"><span>短行（≤6 字）</span><b>${r.shortN} 行</b></div>
+  </div>`);
+
+  L.push(`<div class="card"><h3>行 长 图</h3>`);
+  const maxLen = Math.max(...r.lens, 1);
+  r.lens.forEach((n, i) => {
+    const w = Math.max(3, Math.round(n / maxLen * 300));
+    const s = (r.lines[i] || "").slice(0, 18);
+    L.push(`<div class="bar-row"><span class="idx">${i + 1}</span>
+      <span class="bar" style="width:${w}px"><i style="width:100%"></i></span>
+      <span class="len">${n}</span><span class="txt">${esc(s)}</span></div>`);
+  });
+  L.push(`</div>`);
+
+  L.push(`<div class="card"><h3>行 尾</h3>
+    <div class="sub">${r.tails.join('／')}</div>
+    <div class="kv"><span>相邻同尾</span><b>${r.adjRep} 处</b></div></div>`);
+
+  L.push(`<div class="card"><h3>体 检（判断留给你）</h3>
+    ${r.issues.length
+      ? `<ol class="tips">${r.issues.map(t => `<li>${esc(t)}</li>`).join('')}</ol>`
+      : `<p class="sub">没查出明显的问题。真要说：把最重的那一行往前提一提，看看气顺不顺。</p>`}
+  </div>`);
+  L.push(`<p class="kicker">诗不打分——诗的好坏留给你，尺子只报数。</p>`);
+  return L.join('');
+}
+
+function toPoemText(r) {
+  const L = ["玉尺 · 诗诊", `行数 ${r.n}　节 ${r.sections.length}　平均 ${r.avg.toFixed(0)} 字　CV ${r.cv.toFixed(2)}`,
+             `行尾：${r.tails.join('／')}（相邻同尾 ${r.adjRep} 处）`];
+  if (r.issues.length) { L.push("体检："); r.issues.forEach((t, i) => L.push(`${i + 1}. ${t}`)); }
+  else L.push("体检：没查出明显的问题。");
+  return L.join("\n");
+}
+
 function verdict(score) {
   if (score >= 80) return "「有气」——长短相间，读起来有呼吸。";
   if (score >= 60) return "「气弱」——能读，但节奏偏平，缺短句的顿挫。";
@@ -322,14 +428,25 @@ function toTextReport(r, plain) {
 }
 
 let lastReport = "";
+let mode = "prose";
+document.querySelectorAll(".mode").forEach(b => b.addEventListener("click", () => {
+  mode = b.dataset.mode;
+  document.querySelectorAll(".mode").forEach(x => x.classList.toggle("on", x === b));
+  $("result").innerHTML = "";
+  $("copy").style.display = "none";
+}));
 $("run").addEventListener("click", () => {
   const t = $("text").value.trim();
   if (!t) { $("text").focus(); return; }
-  const r = analyze(t);
-  let sents = splitSentences(splitParagraphs(t)).filter(s => hanzi(s) > 0);
-  r.sents = sents;
-  $("result").innerHTML = renderReport(r);
-  lastReport = toTextReport(r);
+  if (mode === "poem") {
+    const r = analyzePoem(t);
+    $("result").innerHTML = renderPoemReport(r);
+    lastReport = toPoemText(r);
+  } else {
+    const r = analyze(t);
+    $("result").innerHTML = renderReport(r);
+    lastReport = toTextReport(r);
+  }
   $("copy").style.display = "inline-block";
 });
 $("demo").addEventListener("click", () => {
@@ -337,6 +454,12 @@ $("demo").addEventListener("click", () => {
   $("run").click();
 });
 if (location.hash === "#demo") $("demo").click();
+const POEM_DEMO = "雨停在半空\n瓦片亮了一下\n巷子深处的猫叫，拖得很长\n\n我把伞收起来\n又撑开\n像一句没说出口的话";
+if (location.hash === "#poem") {
+  document.querySelector('.mode[data-mode="poem"]').click();
+  $("text").value = POEM_DEMO;
+  $("run").click();
+}
 $("copy").addEventListener("click", async () => {
   if (!lastReport) return;
   try { await navigator.clipboard.writeText(lastReport); $("copy").textContent = "已复制"; }
