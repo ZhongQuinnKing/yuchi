@@ -8678,8 +8678,8 @@ function toPoemText(r) {
 }
 
 /* 人类参考样本的分数分布（与命令行端同一张表，语料或阈值变动后两边同换） */
-const PERCENTILE_TABLE = [59, 68, 71, 74, 74, 76, 77, 78, 79, 80,
-                          82, 84, 85, 87, 89, 91, 92, 92, 94, 98];
+const PERCENTILE_TABLE = [59, 68, 71, 74, 75, 76, 78, 79, 80, 81,
+                          83, 84, 86, 87, 90, 91, 92, 93, 94, 98];
 function percentileOf(score) {
   const below = PERCENTILE_TABLE.filter(v => v < score).length;
   const equal = PERCENTILE_TABLE.filter(v => v === score).length;

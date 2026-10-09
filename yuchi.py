@@ -695,8 +695,8 @@ def render_lian(path, title):
 
 
 # 人类参考样本的分数分布（升序，20 段真人语料；语料或阈值变动后跑 calibrate.py 重取）
-PERCENTILE_TABLE = [59, 68, 71, 74, 74, 76, 77, 78, 79, 80,
-                    82, 84, 85, 87, 89, 91, 92, 92, 94, 98]
+PERCENTILE_TABLE = [59, 68, 71, 74, 75, 76, 78, 79, 80, 81,
+                    83, 84, 86, 87, 90, 91, 92, 93, 94, 98]
 
 
 def percentile_of(score):
@@ -868,7 +868,7 @@ def render_html(r, title):
             '<div class="card">'
             f'<span class="score">{r["score"]}</span>'
             f'<span class="verdict">{esc(verdict(r["score"]))}</span>'
-            f'<p class="sub">约超过 {percentile_of(r["score"])}% 的人类参照样本（散文 58 段）</p>'
+            f'<p class="sub">约超过 {percentile_of(r["score"])}% 的人类参照样本（散文 65 段）</p>'
             f'<p class="sub">大句 {r["n"]} 句　平均 {r["avg"]:.0f} 字　'
             f'小句 {r["n_clause"]} 句　最长平滑段 {r["flat_n"]} 句</p>'
             "</div>"
