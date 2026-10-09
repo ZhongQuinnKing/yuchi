@@ -29,5 +29,8 @@ jobs:
       - name: 校准冒烟（两群不重叠）
         run: python3 calibrate.py | grep -q "无重叠"
 
+      - name: 工具测试（unittest 套件）
+        run: python3 -m unittest test_yuchi
+
       - name: 文字校对（提醒式，只记不拦）
         run: python3 check_typos.py || true
