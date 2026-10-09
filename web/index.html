@@ -193,7 +193,9 @@ function analyze(text) {
   r.glueDensity = total ? glueTotal / total * 100 : 0;
   r.glueHits = glueHits.sort((a, b) => b[1] - a[1]);
 
-  const vagueTotal = VAGUE_WORDS.reduce((s, w) => s + count(statText, w), 0);
+  /* "十分"单独走正则：排除"四十分钟"这类跨词误匹配 */
+  const vagueTotal = VAGUE_WORDS.filter(w => w !== "十分").reduce((s, w) => s + count(statText, w), 0)
+    + ((statText.match(/十分(?!钟)/g) || []).length);
   r.vagueDensity = total ? vagueTotal / total * 100 : 0;
 
   const enumN = ENUM_WORDS.reduce((s, w) => s + count(statText, w), 0);
