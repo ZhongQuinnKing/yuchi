@@ -33,6 +33,15 @@ GLUE_WORDS = [
 ENUM_WORDS = ["首先", "其次", "再次", "最后，", "第一，", "第二，", "第三，",
               "其一", "其二", "一方面", "另一方面", "此外", "与此同时", "除此之外"]
 SUM_WORDS = ["综上所述", "总而言之", "由此可见", "总的来说", "总之", "让我们"]
+# 统计词频前先剥离"引文"：成对引号（含直引号）里的内容与 markdown 引用块行。
+# 引用与教学举例是别人/别处的话，不是作者的口吻，不该计入。
+QUOTE_STRIP = re.compile(
+    "[“][^“”]*[”]"
+    "|[「][^「」]*[」]"
+    "|[『][^『』]*[』]"
+    '|["][^"]{1,120}["]'
+)
+QUOTE_BLOCK = re.compile(r"^[ \t]*> .*$", re.M)
 
 # 评分阈值（先验值，待 calibrate.py 按语料校准）：每项 [满分点, 零点]
 CONFIG = {
@@ -123,6 +132,7 @@ def longest_flat_run(lens, spread=8):
 def analyze(text):
     paras = split_paragraphs(text)
     all_text = "\n".join(paras)
+    stat_text = QUOTE_BLOCK.sub("", QUOTE_STRIP.sub("", all_text))
     sents = split_sentences(paras)
     lens = [hanzi(s) for s in sents]
     pairs = [(s, n) for s, n in zip(sents, lens) if n > 0]
@@ -154,13 +164,13 @@ def analyze(text):
     r["short_count"] = sum(1 for n in lens if n <= 12)
     r["short_per200"] = (r["short_count"] / total * 200) if total else 0
 
-    glue_hits = [(w, all_text.count(w)) for w in GLUE_WORDS if all_text.count(w)]
+    glue_hits = [(w, stat_text.count(w)) for w in GLUE_WORDS if stat_text.count(w)]
     glue_total = sum(c for _, c in glue_hits)
     r["glue_density"] = (glue_total / total * 100) if total else 0
     r["glue_hits"] = sorted(glue_hits, key=lambda x: -x[1])
 
-    enum_n = sum(all_text.count(w) for w in ENUM_WORDS)
-    sum_n = sum(all_text.count(w) for w in SUM_WORDS)
+    enum_n = sum(stat_text.count(w) for w in ENUM_WORDS)
+    sum_n = sum(stat_text.count(w) for w in SUM_WORDS)
     r["enum_n"], r["sum_n"] = enum_n, sum_n
     r["struct_raw"] = enum_n + 2 * sum_n
     if enum_n >= 2 and sum_n >= 1:
@@ -172,9 +182,9 @@ def analyze(text):
     else:
         r["struct"] = "自然推进"
 
-    r["dash"] = all_text.count("——")
+    r["dash"] = stat_text.count("——")
     r["dash_density"] = (r["dash"] / total * 100) if total else 0
-    r["semi"] = all_text.count("；") + all_text.count(";")
+    r["semi"] = stat_text.count("；") + stat_text.count(";")
 
     plens = [hanzi(p) for p in paras]
     r["n_para"] = len(paras)

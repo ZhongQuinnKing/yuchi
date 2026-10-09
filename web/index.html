@@ -108,6 +108,9 @@ const ENUM_WORDS = ["首先","其次","再次","最后，","第一，","第二�
   "一方面","另一方面","此外","与此同时","除此之外"];
 const SUM_WORDS = ["综上所述","总而言之","由此可见","总的来说","总之","让我们"];
 const STRUCT_ONLY = new Set([...GLUE_WORDS, ...ENUM_WORDS, ...SUM_WORDS]);
+/* 统计词频前先剥离引文：成对引号（含直引号）与 markdown 引用块行 */
+const QUOTE_STRIP = /[“][^“”]*[”]|[「][^「」]*[」]|[『][^『』]*[』]|["][^"]{1,120}["]/g;
+const QUOTE_BLOCK = /^[ \t]*> .*$/gm;
 const CONFIG = {
   sent_cv: [0.45, 0.15], clause_cv: [0.55, 0.25], flat_run: [0.25, 0.60],
   short_per200: [1.0, 0.2], glue_density: [1.0, 4.0], dash_density: [1.5, 4.0],
@@ -159,6 +162,7 @@ function longestFlatRun(lens, spread = 8) {
 function analyze(text) {
   const paras = splitParagraphs(text);
   const allText = paras.join('\n');
+  const statText = allText.replace(QUOTE_BLOCK, '').replace(QUOTE_STRIP, '');
   let sents = splitSentences(paras);
   sents = sents.filter(s => hanzi(s) > 0);
   const lens = sents.map(hanzi);
@@ -179,20 +183,20 @@ function analyze(text) {
   r.shortCount = lens.filter(n => n <= 12).length;
   r.shortPer200 = total ? r.shortCount / total * 200 : 0;
 
-  const glueHits = GLUE_WORDS.map(w => [w, count(allText, w)]).filter(x => x[1]);
+  const glueHits = GLUE_WORDS.map(w => [w, count(statText, w)]).filter(x => x[1]);
   const glueTotal = glueHits.reduce((s, x) => s + x[1], 0);
   r.glueDensity = total ? glueTotal / total * 100 : 0;
   r.glueHits = glueHits.sort((a, b) => b[1] - a[1]);
 
-  const enumN = ENUM_WORDS.reduce((s, w) => s + count(allText, w), 0);
-  const sumN = SUM_WORDS.reduce((s, w) => s + count(allText, w), 0);
+  const enumN = ENUM_WORDS.reduce((s, w) => s + count(statText, w), 0);
+  const sumN = SUM_WORDS.reduce((s, w) => s + count(statText, w), 0);
   r.enumN = enumN; r.sumN = sumN; r.structRaw = enumN + 2 * sumN;
   r.struct = (enumN >= 2 && sumN >= 1) ? "总分总（清单式）"
            : enumN >= 2 ? "清单式列举" : sumN >= 1 ? "结尾总结式" : "自然推进";
 
-  r.dash = count(allText, "——");
+  r.dash = count(statText, "——");
   r.dashDensity = total ? r.dash / total * 100 : 0;
-  r.semi = count(allText, "；") + count(allText, ";");
+  r.semi = count(statText, "；") + count(statText, ";");
 
   const plens = paras.map(hanzi);
   r.nPara = paras.length;
