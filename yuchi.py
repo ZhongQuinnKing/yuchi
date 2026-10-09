@@ -9,9 +9,10 @@
 五层指标：大句节奏 / 小句呼吸 / 密度 / 结构 / 段落。
 阈值集中在 CONFIG，用 calibrate.py 按语料校准（当前为先验值）。
 用法：
-    python3 yuchi.py <文件路径> [--title 标题] [--poem|--qu|--lian]
+    python3 yuchi.py <文件路径> [--title 标题] [--poem|--qu|--fu|--lian]
         （--poem 诗模式：平仄标注、韵脚；--qu 曲模式：声调、韵脚（中原音韵）；
-          --lian 联模式：字数、平仄、对仗；--ci 词牌名 词模式：给谱并对谱，文件可省略）
+          --fu 赋模式：骈句报数、句末韵部；--lian 联模式：字数、平仄、对仗；
+          --ci 词牌名 词模式：给谱并对谱，文件可省略；--html 输出 HTML 报告卡）
     echo "文本" | python3 yuchi.py -
 零依赖，纯标准库。
 """
@@ -765,6 +766,125 @@ def render_qu(path, title):
     return "\n".join(out)
 
 
+def render_fu(path, title):
+    text = read_text(path)
+    r = analyze_poem(text)
+    if not r["n"]:
+        return "没读到有效的句子——检查一下文件内容。"
+    out = []
+    out.append(f"玉尺 · 赋诊：{title}")
+    out.append("=" * 46)
+    out.append("")
+    out.append(f"行数 {r['n']}　节 {len(r['sections'])}（各节行数 {'/'.join(map(str, r['sections']))}）")
+    out.append(f"平均行长 {r['avg']:.0f} 字　变异系数 {r['cv']:.2f}"
+               f"　最长 {r['max']} / 最短 {r['min']}")
+    out.append("")
+    out.append("行长图（每格 1 字）")
+    out.append("-" * 46)
+    for i, (l, n) in enumerate(zip(r["lines"], r["lens"]), 1):
+        head = l[:20] + ("…" if len(l) > 20 else "")
+        out.append(f"{i:>2} {bar(n, scale=1):<40} {n:>3}  {head}")
+    out.append("")
+    lens = r["lens"]
+    four = sum(1 for n in lens if n == 4)
+    six = sum(1 for n in lens if n == 6)
+    pair_same = sum(1 for i in range(1, len(lens)) if lens[i] == lens[i - 1])
+    out.append("骈句报数（赋以四六骈俪为骨）")
+    out.append("-" * 46)
+    out.append(f"四字句 {four} 句　六字句 {six} 句　共 {r['n']} 句"
+               f"（四六合计占 {(four + six) / r['n'] * 100:.0f}%）")
+    out.append(f"相邻句字数相同 {pair_same} 处（共 {max(1, r['n'] - 1)} 个相邻句对）")
+    out.append("")
+    out.append("句末字韵部一览（平水韵；赋的韵位随体式不定，只列不判）")
+    out.append("-" * 46)
+    rhyme_idx = load_rhyme_index()
+    for i, ch in enumerate(r["tails"], 1):
+        yuns = sorted(rhyme_idx.get(ch, []))
+        out.append(f"第 {i} 句尾「{ch}」：{'／'.join(yuns) if yuns else '韵表未收'}")
+    out.append("")
+    issues = [x for x in r["issues"] if "豆腐块" not in x and "行长太平" not in x]
+    out.append("体检（判断留给你）")
+    out.append("-" * 46)
+    if issues:
+        for i, t in enumerate(issues, 1):
+            out.append(f"{i}. {t}")
+    else:
+        out.append("没查出明显的问题。")
+    out.append("")
+    out.append("赋没有固定格律谱——赋诊只报三样：行呼吸、骈句字数、句末韵部；")
+    out.append("对仗的工整（词性相对）判不了，不装懂，请对照经典自己看。")
+    return "\n".join(out)
+
+
+HTML_CSS = """
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+       background: #faf9f6; color: #1f1f1f; margin: 0; padding: 40px 20px; }
+.wrap { max-width: 760px; margin: 0 auto; }
+.card { background: #fff; border: 1px solid #e8e4dc; border-radius: 12px;
+        padding: 20px 24px; margin-bottom: 14px; }
+h1 { font-family: "Songti SC", "STSong", serif; font-size: 26px;
+     letter-spacing: 2px; margin: 0 0 4px; }
+h2 { font-size: 15px; margin: 0 0 10px; color: #6b5b3e; letter-spacing: 4px; }
+.score { font-size: 44px; font-weight: 700; color: #8a6d3b; }
+.verdict { font-size: 15px; color: #444; margin-left: 10px; }
+.sub { color: #777; font-size: 13px; margin: 4px 0; }
+.row { display: flex; align-items: center; gap: 8px; font-size: 13px; margin: 2px 0; }
+.idx { width: 26px; text-align: right; color: #999; flex: none; }
+.bar { background: #d9c9a3; height: 10px; border-radius: 3px; display: inline-block; min-width: 3px; flex: none; }
+.len { width: 30px; text-align: right; color: #666; flex: none; }
+.txt { color: #333; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+ol { margin: 6px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.9; }
+p { font-size: 14px; line-height: 1.9; margin: 6px 0; }
+.foot { text-align: center; color: #999; font-size: 12px; margin-top: 18px; }
+"""
+
+
+def render_html(r, title):
+    """把诊断渲染成单文件 HTML 报告（数据与命令行/网页同一套）。"""
+
+    def esc(s):
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    if r["form"] == "structured":
+        card = (
+            '<div class="card"><h2>文体识别</h2>'
+            "<p>条目 / 结构化文本——编号或符号开头的行占 "
+            f"{r['form_item_ratio'] * 100:.0f}%；通知、纪要、清单、模板这类文体。</p>"
+            "<p>玉尺的呼吸分是给散文的。这类文本的“整齐”是文体要求，不是毛病；"
+            "该看的是条目齐不齐、信息全不全、层级顺不顺。</p>"
+            f'<p class="sub">客观读数：{r["n"]} 句 / {r["total"]} 字。</p></div>'
+        )
+    else:
+        maxlen = max(r["lens"]) if r["lens"] else 1
+        rows = "".join(
+            f'<div class="row"><span class="idx">{i}</span>'
+            f'<span class="bar" style="width:{max(3, round(n / maxlen * 320))}px"></span>'
+            f'<span class="len">{n}</span><span class="txt">{esc(s[:26])}</span></div>'
+            for i, (s, n) in enumerate(zip(r["sents"], r["lens"]), 1)
+        )
+        tips = make_tips(r)
+        notes = "".join(f"<li>{esc(t)}</li>" for t in tips)
+        card = (
+            '<div class="card">'
+            f'<span class="score">{r["score"]}</span>'
+            f'<span class="verdict">{esc(verdict(r["score"]))}</span>'
+            f'<p class="sub">约超过 {percentile_of(r["score"])}% 的人类参照样本（散文 52 段）</p>'
+            f'<p class="sub">大句 {r["n"]} 句　平均 {r["avg"]:.0f} 字　'
+            f'小句 {r["n_clause"]} 句　最长平滑段 {r["flat_n"]} 句</p>'
+            "</div>"
+            f'<div class="card"><h2>句长节奏图</h2>{rows}</div>'
+            f'<div class="card"><h2>体检与改法</h2><ol>{notes}</ol></div>'
+        )
+    return (
+        "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n"
+        f"<title>玉尺报告 · {esc(title)}</title>\n<style>{HTML_CSS}</style>\n</head>\n<body>\n"
+        f'<div class="wrap"><h1>玉尺 · 文气诊断</h1>'
+        f'<p class="sub">{esc(title)}</p>{card}'
+        '<p class="foot">玉尺 · 让中文写得有呼吸 —— 量的是文字本身，判断留给你</p>'
+        "</div>\n</body>\n</html>\n"
+    )
+
+
 def render_json(r):
     out = {
         "score": r["score"],
@@ -878,6 +998,32 @@ def bar(n, scale=2, cap=40):
     return "█" * min(cap, max(1, round(n / scale)))
 
 
+def make_tips(r):
+    """落到句子的改法（命令行与 HTML 报告卡共用）。"""
+    tips = []
+    if r["flat_n"] >= 4:
+        tips.append(f"全篇有一段 {r['flat_n']} 句的平滑区，长度变化不到 8 字。"
+                    "挑其中最长的两句动手：一句拆成两句，一句砍到十字以内。")
+    if r["cv"] < 0.30:
+        tips.append("大句长短太齐。在长句群中间安插短句，让读者有换气的地方。")
+    if r["clause_cv"] < 0.35:
+        tips.append("句内的逗号也走得均匀。长句内部掺进三五个字的短顿，"
+                    "呼吸就有了起伏。")
+    if r["glue_density"] > 3:
+        tips.append("连接词在替读者铺路。「因此」「然而」删一半，"
+                    "因果交给语序，转折交给短句。")
+    if r["struct_raw"] >= 2:
+        tips.append(f"结构的骨架露出来了（{r['struct']}）。把「首先其次最后」拆掉，"
+                    "让每段接着上一段的意思往下走，而不是平铺开清单。")
+    if r["dash_density"] > 1.5:
+        tips.append("破折号在替你做语气的活。留最重的一处，其余改成句号。")
+    if r["short_per200"] < 0.8:
+        tips.append("短句太少。每 200 字安插一句十来个字的短句，让长句有落点。")
+    if not tips:
+        tips.append("节奏健康。真要说：把最好的句子往前提一句，开头会更峻峭。")
+    return tips
+
+
 def render(path, title):
     text = read_text(path)
     n_hz = hanzi(text)
@@ -931,27 +1077,7 @@ def render(path, title):
         out.append("  单段文本，段落层未测（多段文章才有此项）")
     out.append("")
     out.append("【改法（落到句，不给形容词）】")
-    tips = []
-    if r["flat_n"] >= 4:
-        tips.append(f"全篇有一段 {r['flat_n']} 句的平滑区，长度变化不到 8 字。"
-                    "挑其中最长的两句动手：一句拆成两句，一句砍到十字以内。")
-    if r["cv"] < 0.30:
-        tips.append("大句长短太齐。在长句群中间安插短句，让读者有换气的地方。")
-    if r["clause_cv"] < 0.35:
-        tips.append("句内的逗号也走得均匀。长句内部掺进三五个字的短顿，"
-                    "呼吸就有了起伏。")
-    if r["glue_density"] > 3:
-        tips.append("连接词在替读者铺路。「因此」「然而」删一半，"
-                    "因果交给语序，转折交给短句。")
-    if r["struct_raw"] >= 2:
-        tips.append(f"结构的骨架露出来了（{r['struct']}）。把「首先其次最后」拆掉，"
-                    "让每段接着上一段的意思往下走，而不是平铺开清单。")
-    if r["dash_density"] > 1.5:
-        tips.append("破折号在替你做语气的活。留最重的一处，其余改成句号。")
-    if r["short_per200"] < 0.8:
-        tips.append("短句太少。每 200 字安插一句十来个字的短句，让长句有落点。")
-    if not tips:
-        tips.append("节奏健康。真要说：把最好的句子往前提一句，开头会更峻峭。")
+    tips = make_tips(r)
     for i, t in enumerate(tips, 1):
         out.append(f"  {i}. {t}")
     out.append("")
@@ -982,6 +1108,12 @@ def main():
     qu = "--qu" in args
     if qu:
         args.remove("--qu")
+    fu = "--fu" in args
+    if fu:
+        args.remove("--fu")
+    html_out = "--html" in args
+    if html_out:
+        args.remove("--html")
     json_out = "--json" in args
     if json_out:
         args.remove("--json")
@@ -1012,8 +1144,21 @@ def main():
         print(render_lian(path, title))
     elif qu:
         print(render_qu(path, title))
+    elif fu:
+        print(render_fu(path, title))
     elif poem:
         print(render_poem(path, title))
+    elif html_out:
+        text = read_text(path)
+        if hanzi(text) < 50:
+            print("文本太短（不足五十个汉字），节奏量不出来——多写几段再量。")
+        else:
+            r = analyze(text)
+            base = os.path.splitext(os.path.basename(path))[0]
+            out_path = base + "-报告.html"
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(render_html(r, title))
+            print(f"已生成 {out_path}")
     elif json_out:
         text = read_text(path)
         if hanzi(text) < 50:
