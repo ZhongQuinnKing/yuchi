@@ -8623,6 +8623,15 @@ function toPoemText(r) {
   return L.join("\n");
 }
 
+/* 人类参考样本的分数分布（与命令行端同一张表，语料或阈值变动后两边同换） */
+const PERCENTILE_TABLE = [50, 53, 58, 63, 67, 68, 72, 76, 76, 79,
+                          81, 81, 83, 84, 86, 87, 87, 92, 92, 97];
+function percentileOf(score) {
+  const below = PERCENTILE_TABLE.filter(v => v < score).length;
+  const equal = PERCENTILE_TABLE.filter(v => v === score).length;
+  return Math.round((below + 0.5 * equal) / PERCENTILE_TABLE.length * 100);
+}
+
 function verdict(score) {
   if (score >= 80) return "「有气」——长短相间，读起来有呼吸。";
   if (score >= 60) return "「气弱」——能读，但节奏偏平，缺短句的顿挫。";
@@ -8662,6 +8671,7 @@ function renderReport(r) {
   L.push(`<div class="card">
     <div class="score-row"><span class="score">${r.score}</span>
       <span class="verdict">${verdict(r.score)}</span></div>
+    <div class="sub">约超过 ${percentileOf(r.score)}% 的人类样本（按当前参考语料）</div>
     <div class="sub">大句 ${r.n} 句　平均 ${r.avg.toFixed(0)} 字　小句 ${r.nClause} 句</div>
   </div>`);
 

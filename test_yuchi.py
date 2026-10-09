@@ -5,6 +5,7 @@
 运行：python3 -m unittest test_yuchi -v
 覆盖：文本长度保护、误伤词回归、引文剥离、诗/词/联三模式、边界输入。
 """
+import json
 import os
 import tempfile
 import unittest
@@ -49,6 +50,22 @@ class TestProse(unittest.TestCase):
                "第二段是完整的一句。\n")
         r = yuchi.analyze(txt)
         self.assertEqual(r["n_para"], 2)
+
+    def test_percentile_bounds(self):
+        self.assertGreaterEqual(yuchi.percentile_of(100), 95)
+        self.assertLessEqual(yuchi.percentile_of(0), 5)
+        self.assertTrue(0 <= yuchi.percentile_of(80) <= 100)
+
+    def test_json_output_parses(self):
+        p = _tmp("林子里安静。鸟叫了一声，又没了。他坐着，看光从叶缝里落下来，"
+                 "一点点挪过脚背。后来起了风。他站起来，把帽子扣上，走了。")
+        try:
+            data = json.loads(yuchi.render_json(yuchi.analyze(yuchi.read_text(p))))
+            self.assertIn("score", data)
+            self.assertIn("percentile", data)
+            self.assertIsInstance(data["sentences"], list)
+        finally:
+            os.unlink(p)
 
     def test_good_prose_scores_high(self):
         r = yuchi.analyze("林子里安静。鸟叫了一声，又没了。他坐着，看光从叶缝里落下来，"

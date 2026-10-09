@@ -26,7 +26,7 @@
 ## 三件套
 
 1. **网页版**：打开就能量，贴文字出诊断卡（`web/index.html`，可直接挂 GitHub Pages）
-2. **命令行**：`python3 yuchi.py 你的文章.txt`（零依赖，纯标准库）
+2. **命令行**：`python3 yuchi.py 你的文章.txt`（零依赖，纯标准库；另有 `--poem` 诗、`--ci 词牌` 词、`--lian` 联、`--json` 结构化输出）
 3. **技能包**：`SKILL.md` 加十四篇教材，装进 Claude、豆包等 AI 助手——AI 写中文、改中文时按它办
 
 **在线试用（不用装）**：https://zhongquinnking.github.io/yuchi/
