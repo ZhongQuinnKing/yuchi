@@ -110,6 +110,27 @@ class TestPoem(unittest.TestCase):
             os.unlink(p)
 
 
+class TestQu(unittest.TestCase):
+    def test_qu_rhyme_one_tune(self):
+        # 《天净沙·秋思》五句全押家麻；北曲一韵到底（曲模式回归）
+        p = _tmp("枯藤老树昏鸦\n小桥流水人家\n古道西风瘦马\n夕阳西下\n断肠人在天涯\n")
+        try:
+            out = yuchi.render_qu(p, "曲")
+            self.assertIn("第 1 句尾「鸦」：家麻", out)
+            self.assertIn("第 5 句尾「涯」：家麻", out)
+            self.assertIn("一韵到底", out)
+        finally:
+            os.unlink(p)
+
+    def test_qu_tone_zhongyuan(self):
+        # 声调按中原音韵：阴/阳/上/去；入声字按派入的声显示（北曲用法）；多音＝通
+        self.assertEqual(yuchi.qu_tone_of("鸦")[0], "阴")
+        self.assertEqual(yuchi.qu_tone_of("马")[0], "上")
+        self.assertEqual(yuchi.qu_tone_of("雪")[0], "上")   # 入作上
+        self.assertEqual(yuchi.qu_tone_of("月")[0], "去")   # 入作去
+        self.assertEqual(yuchi.qu_tone_of("说")[0], "通")   # 多音
+
+
 class TestRegulatedAndCiLian(unittest.TestCase):
     def test_regulated_detection(self):
         self.assertTrue(yuchi.is_regulated([7, 7, 7, 7]))

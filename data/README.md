@@ -15,3 +15,8 @@
 - `Ci_Word_Tune.json`（词用字调与词林正韵韵部）
 
 同出 charlesix59/chinese_word_rhyme，MIT。词谱数据已随仓库入库（clone 即用）。
+
+- `Zhongyuan_Yinyun.tsv`（中原音韵原文表，繁体）＋ `Zhongyuan_Rhyme.json`（字→声调/韵部，5347 字，供曲模式）
+
+来源：[nk2028/zhongyuan-data](https://github.com/nk2028/zhongyuan-data)，许可 CC0-1.0（公有领域奉献）。
+生成时把用字与韵部名转简体（zhconv）；生成脚本＝`make_zhongyuan_data.py`（读 TSV 可复跑）。

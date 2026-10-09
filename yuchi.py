@@ -9,8 +9,9 @@
 五层指标：大句节奏 / 小句呼吸 / 密度 / 结构 / 段落。
 阈值集中在 CONFIG，用 calibrate.py 按语料校准（当前为先验值）。
 用法：
-    python3 yuchi.py <文件路径> [--title 标题] [--poem]
-        （--poem 走诗模式；--ci 词牌名 走词模式：给谱并对谱，文件可省略）
+    python3 yuchi.py <文件路径> [--title 标题] [--poem|--qu|--lian]
+        （--poem 诗模式：平仄标注、韵脚；--qu 曲模式：声调、韵脚（中原音韵）；
+          --lian 联模式：字数、平仄、对仗；--ci 词牌名 词模式：给谱并对谱，文件可省略）
     echo "文本" | python3 yuchi.py -
 零依赖，纯标准库。
 """
@@ -305,6 +306,14 @@ def annotate_tones(lines):
     return out
 
 
+def annotate_qu_tones(lines):
+    """曲的逐字声调（中原音韵口径）"""
+    out = []
+    for l in lines:
+        out.append("".join(qu_tone_of(c)[0] for c in l if "一" <= c <= "鿿"))
+    return out
+
+
 def tone_notes(seq):
     """读感提示：连续四个以上的同声调"""
     notes = []
@@ -467,6 +476,36 @@ def ci_tone_of(ch):
     if not w:
         return "？", None
     return {"平": "平", "仄": "仄", "多": "通"}.get(w.get("tune"), "？"), w.get("rhyme")
+
+
+_ZY_RHYME = None
+
+
+def load_zhongyuan():
+    global _ZY_RHYME
+    if _ZY_RHYME is None:
+        try:
+            _ZY_RHYME = json.loads(read_text(os.path.join(HERE, "data", "Zhongyuan_Rhyme.json")))
+        except Exception:
+            _ZY_RHYME = {}
+    return _ZY_RHYME
+
+
+def qu_tone_of(ch):
+    """字 → (声调显示, 韵部集合)。北曲口径：入声字按派入的声显示。"""
+    ents = load_zhongyuan().get(ch)
+    if not ents:
+        return "？", set()
+    tones = sorted({t for t, _ in ents})
+    yuns = sorted({y for _, y in ents})
+    t = tones[0] if len(tones) == 1 else "通"
+    if t.startswith("入作"):  # 入作上/陽/去 → 派入的声
+        t = {"上": "上", "陽": "阳", "去": "去"}.get(t[2:], "通")
+    elif t == "陰":
+        t = "阴"
+    elif t == "陽":
+        t = "阳"
+    return t, yuns
 
 
 def render_ci(path, title, ci_name):
@@ -664,6 +703,67 @@ def percentile_of(score):
     return round((below + 0.5 * equal) / len(PERCENTILE_TABLE) * 100)
 
 
+def render_qu(path, title):
+    text = read_text(path)
+    r = analyze_poem(text)
+    if not r["n"]:
+        return "没读到有效的句子——检查一下文件内容。"
+    out = []
+    out.append(f"玉尺 · 曲诊：{title}")
+    out.append("=" * 46)
+    out.append("")
+    out.append(f"行数 {r['n']}　节 {len(r['sections'])}（各节行数 {'/'.join(map(str, r['sections']))}）")
+    out.append(f"平均行长 {r['avg']:.0f} 字　变异系数 {r['cv']:.2f}"
+               f"　最长 {r['max']} / 最短 {r['min']}　短行（≤6 字）{r['short']} 行")
+    out.append("")
+    out.append("行长图（每格 1 字）")
+    out.append("-" * 46)
+    for i, (l, n) in enumerate(zip(r["lines"], r["lens"]), 1):
+        head = l[:20] + ("…" if len(l) > 20 else "")
+        out.append(f"{i:>2} {bar(n, scale=1):<40} {n:>3}  {head}")
+    out.append("-" * 46)
+    out.append("")
+    out.append(f"行尾：{'／'.join(r['tails'])}")
+    out.append(f"相邻同尾 {r['adj_rep']} 处")
+    out.append("")
+    seqs = annotate_qu_tones(r["lines"])
+    out.append("声调标注（中原音韵：阴／阳／上／去／通＝多音；？＝韵表未收）")
+    out.append("入声字已派入三声，按派入的声标注（北曲用法）")
+    out.append("-" * 46)
+    for i, (l, seq) in enumerate(zip(r["lines"], seqs), 1):
+        out.append(f"{i:>2} {seq}  {l}")
+    out.append("")
+    yun_list = []
+    for i, ch in enumerate(r["tails"], 1):
+        _t, yuns = qu_tone_of(ch)
+        yun_list.append((i, ch, "／".join(yuns) if yuns else "韵表未收"))
+    out.append("韵脚（每句末字；北曲小令常见句句押韵）")
+    out.append("-" * 46)
+    for i, ch, yun in yun_list:
+        out.append(f"第 {i} 句尾「{ch}」：{yun}")
+    same = {y for _, _, y in yun_list if y != "韵表未收"}
+    extra_notes = []
+    if len(same) > 1:
+        extra_notes.append("韵脚不在同一部（" + "／".join(sorted(same))
+                           + "）。北曲一般一韵到底，看看要不要调。")
+    elif same:
+        extra_notes.append("韵脚一韵到底（" + "／".join(sorted(same)) + "），北曲的规矩守住了。")
+    out.append("")
+    # 曲的长短句由曲牌谱定，不适用“豆腐块/行长太平”两条
+    issues = [x for x in r["issues"] if "豆腐块" not in x and "行长太平" not in x]
+    out.append("体检（判断留给你）")
+    out.append("-" * 46)
+    all_notes = issues + extra_notes
+    if all_notes:
+        for i, t in enumerate(all_notes, 1):
+            out.append(f"{i}. {t}")
+    else:
+        out.append("没查出明显的问题。")
+    out.append("")
+    out.append("曲牌谱（每句平仄与韵位）暂无可靠开源数据，玉尺不装懂——曲诊只报三样：行呼吸、声调、韵脚。")
+    return "\n".join(out)
+
+
 def render_json(r):
     out = {
         "score": r["score"],
@@ -830,6 +930,9 @@ def main():
     lian = "--lian" in args
     if lian:
         args.remove("--lian")
+    qu = "--qu" in args
+    if qu:
+        args.remove("--qu")
     json_out = "--json" in args
     if json_out:
         args.remove("--json")
@@ -858,6 +961,8 @@ def main():
         print(render_ci(path, title, ci))
     elif lian:
         print(render_lian(path, title))
+    elif qu:
+        print(render_qu(path, title))
     elif poem:
         print(render_poem(path, title))
     elif json_out:
