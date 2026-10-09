@@ -116,10 +116,11 @@ const STRUCT_ONLY = new Set([...GLUE_WORDS, ...ENUM_WORDS, ...SUM_WORDS]);
 const QUOTE_STRIP = /[“][^“”]*[”]|[「][^「」]*[」]|[『][^『』]*[』]|["][^"]{1,120}["]/g;
 const QUOTE_BLOCK = /^[ \t]*> .*$/gm;
 const CONFIG = {
-  sent_cv: [0.45, 0.15], clause_cv: [0.55, 0.25], flat_run: [0.25, 0.60],
-  short_per200: [1.0, 0.2], glue_density: [1.0, 4.0], dash_density: [1.5, 4.0],
-  vague_density: [0.3, 1.2],
-  struct_score: [0.0, 3.0], para_cv: [0.50, 0.15],
+  /* 满分点≈人类语料 p75、零点≈AI 语料中位（2026-10-09 重标） */
+  sent_cv: [0.55, 0.18], clause_cv: [0.55, 0.30], flat_run: [0.20, 0.55],
+  short_per200: [1.5, 0.2], glue_density: [0.5, 3.0], dash_density: [0.6, 3.0],
+  vague_density: [0.2, 1.0],
+  struct_score: [0.0, 6.0], para_cv: [0.58, 0.20],
 };
 const WEIGHTS = { rhythm: 0.40, density: 0.25, struct: 0.20, para: 0.15 };
 
@@ -212,9 +213,10 @@ function analyze(text) {
   r.nPara = paras.length;
   r.paraCv = plens.length >= 3 ? cv(plens) : null;
 
-  const sRhythm = 0.50 * soft(...CONFIG.sent_cv, r.cv)
-                + 0.30 * soft(...CONFIG.clause_cv, r.clauseCv)
-                + 0.20 * soft(CONFIG.flat_run[1], CONFIG.flat_run[0], r.flatPct);
+  const sRhythm = 0.40 * soft(...CONFIG.sent_cv, r.cv)
+                + 0.25 * soft(...CONFIG.clause_cv, r.clauseCv)
+                + 0.15 * soft(CONFIG.flat_run[0], CONFIG.flat_run[1], r.flatPct)
+                + 0.20 * soft(...CONFIG.short_per200, r.shortPer200);
   const sDensity = 0.45 * soft(...CONFIG.glue_density, r.glueDensity)
                  + 0.20 * soft(...CONFIG.dash_density, r.dashDensity)
                  + 0.35 * soft(...CONFIG.vague_density, r.vagueDensity);

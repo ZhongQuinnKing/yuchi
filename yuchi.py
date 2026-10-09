@@ -51,15 +51,16 @@ QUOTE_BLOCK = re.compile(r"^[ \t]*> .*$", re.M)
 
 # 评分阈值（先验值，待 calibrate.py 按语料校准）：每项 [满分点, 零点]
 CONFIG = {
-    "sent_cv": [0.45, 0.15],       # 大句变异系数：越高越好
-    "clause_cv": [0.55, 0.25],     # 小句变异系数：越高越好
-    "flat_run": [0.25, 0.60],      # 最长平滑段占比：越低越好
-    "short_per200": [1.0, 0.2],    # 每 200 字短句数：越多越好
-    "glue_density": [1.0, 4.0],    # 套话密度 / 百字：越低越好
-    "dash_density": [1.5, 4.0],    # 破折号密度 / 百字：越低越好
-    "vague_density": [0.3, 1.2],   # 虚词密度 / 百字：越低越好（待语料校准）
-    "struct_score": [0.0, 3.0],    # 列举词 + 2×总结词：越低越好
-    "para_cv": [0.50, 0.15],       # 段落变异系数：越高越好
+    # 满分点≈人类语料 p75、零点≈AI 语料中位（2026-10-09 按分位数分布重标）
+    "sent_cv": [0.55, 0.18],       # 大句变异系数：越高越好
+    "clause_cv": [0.55, 0.30],     # 小句变异系数：越高越好
+    "flat_run": [0.20, 0.55],      # 最长平滑段占比：越低越好
+    "short_per200": [1.5, 0.2],    # 每 200 字短句数：越多越好
+    "glue_density": [0.5, 3.0],    # 套话密度 / 百字：越低越好
+    "dash_density": [0.6, 3.0],    # 破折号密度 / 百字：越低越好
+    "vague_density": [0.2, 1.0],   # 虚词密度 / 百字：越低越好
+    "struct_score": [0.0, 6.0],    # 列举词 + 2×总结词：越低越好
+    "para_cv": [0.58, 0.20],       # 段落变异系数：越高越好
 }
 
 # 综合权重（四层）
@@ -205,9 +206,10 @@ def analyze(text):
     r["para_cv"] = cv(plens) if len(plens) >= 3 else None
 
     # 四层得分
-    s_rhythm = (0.50 * soft(*CONFIG["sent_cv"], r["cv"])
-                + 0.30 * soft(*CONFIG["clause_cv"], r["clause_cv"])
-                + 0.20 * soft(CONFIG["flat_run"][1], CONFIG["flat_run"][0], r["flat_pct"]))
+    s_rhythm = (0.40 * soft(*CONFIG["sent_cv"], r["cv"])
+                + 0.25 * soft(*CONFIG["clause_cv"], r["clause_cv"])
+                + 0.15 * soft(CONFIG["flat_run"][0], CONFIG["flat_run"][1], r["flat_pct"])
+                + 0.20 * soft(*CONFIG["short_per200"], r["short_per200"]))
     s_density = (0.45 * soft(*CONFIG["glue_density"], r["glue_density"])
                  + 0.20 * soft(*CONFIG["dash_density"], r["dash_density"])
                  + 0.35 * soft(*CONFIG["vague_density"], r["vague_density"]))
