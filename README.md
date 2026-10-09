@@ -35,6 +35,7 @@
 
 - 豆包等：对它说一句“请安装这个 skill：https://github.com/ZhongQuinnKing/yuchi”
 - Claude Code / Codex：`git clone https://github.com/ZhongQuinnKing/yuchi ~/.claude/skills/yuchi`
+- 其他一线 AI（ChatGPT / Kimi / 通义 / 元宝 / 智谱 / Gemini / DeepSeek…）：把仓库喂进它的知识库/智能体，或直接发仓库地址请它自装（仓库带 `AGENTS.md`——Codex 这类读它的助手，进目录即懂规矩）
 
 **命令行 / 网页**：clone 下来即用，无需安装任何东西。
 
