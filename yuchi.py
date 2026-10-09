@@ -73,6 +73,11 @@ def hanzi(s):
     return len([c for c in s if c not in PUNCT])
 
 
+def read_text(path):
+    with open(path, encoding="utf-8") as f:
+        return f.read()
+
+
 PARA_END = set("。！？；…”’」』）)")
 
 
@@ -253,8 +258,7 @@ def load_tone_table():
     global _TONE_TABLE
     if _TONE_TABLE is None:
         try:
-            _TONE_TABLE = json.load(open(os.path.join(HERE, "data", "Word_Tune.json"),
-                                         encoding="utf-8"))
+            _TONE_TABLE = json.loads(read_text(os.path.join(HERE, "data", "Word_Tune.json")))
         except Exception:
             _TONE_TABLE = {}
     return _TONE_TABLE
@@ -266,8 +270,7 @@ def load_rhyme_index():
     if _RHYME_INDEX is None:
         idx = {}
         try:
-            d = json.load(open(os.path.join(HERE, "data", "Pingshui_Rhyme.json"),
-                               encoding="utf-8"))
+            d = json.loads(read_text(os.path.join(HERE, "data", "Pingshui_Rhyme.json")))
             for _sheng, bu in d.items():
                 for yun, chars in bu.items():
                     for ch in chars:
@@ -372,7 +375,7 @@ def analyze_poem(text):
 
 
 def render_poem(path, title):
-    text = open(path, encoding="utf-8").read()
+    text = read_text(path)
     r = analyze_poem(text)
     out = []
     out.append(f"玉尺 · 诗诊：{title}")
@@ -442,8 +445,7 @@ def load_ci_tunes():
     global _CI_TUNES
     if _CI_TUNES is None:
         try:
-            _CI_TUNES = json.load(open(os.path.join(HERE, "data", "Ci_Tunes.json"),
-                                       encoding="utf-8"))
+            _CI_TUNES = json.loads(read_text(os.path.join(HERE, "data", "Ci_Tunes.json")))
         except Exception:
             _CI_TUNES = {}
     return _CI_TUNES
@@ -453,8 +455,7 @@ def load_ci_word():
     global _CI_WORD
     if _CI_WORD is None:
         try:
-            _CI_WORD = json.load(open(os.path.join(HERE, "data", "Ci_Word_Tune.json"),
-                                      encoding="utf-8"))
+            _CI_WORD = json.loads(read_text(os.path.join(HERE, "data", "Ci_Word_Tune.json")))
         except Exception:
             _CI_WORD = {}
     return _CI_WORD
@@ -479,7 +480,7 @@ def render_ci(path, title, ci_name):
 
     entry = tunes[ci_name]
     formats = entry["formats"]
-    text = open(path, encoding="utf-8").read() if path else ""
+    text = read_text(path) if path else ""
     text = "\n".join(l for l in text.split("\n") if not l.strip().startswith("#"))
     user_han = [c for c in text if "一" <= c <= "鿿"]
 
@@ -576,7 +577,7 @@ def render_ci(path, title, ci_name):
 # 对联验三样：字数相等、仄起平收、逐位平仄相反（同位同字另记）。
 
 def render_lian(path, title):
-    text = open(path, encoding="utf-8").read() if path else ""
+    text = read_text(path) if path else ""
     text = "\n".join(l for l in text.split("\n") if not l.strip().startswith("#"))
     lines = [l.strip() for l in text.split("\n") if l.strip()]
     if len(lines) < 2:
@@ -666,7 +667,7 @@ def bar(n, scale=2, cap=40):
 
 
 def render(path, title):
-    text = open(path, encoding="utf-8").read()
+    text = read_text(path)
     if hanzi(text) < 50:
         return "文本太短（不足五十个汉字），节奏量不出来——多写几段再量。"
     r = analyze(text)
@@ -766,7 +767,8 @@ def main():
     if path == "-":
         text = sys.stdin.read()
         tmp = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".stdin_tmp.txt")
-        open(tmp, "w", encoding="utf-8").write(text)
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(text)
         path = tmp
     if ci:
         print(render_ci(path, title, ci))
