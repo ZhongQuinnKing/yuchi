@@ -16,9 +16,9 @@
 
 ## 三、校准怎么跑
 
-- 语料：`samples/human/`（真人侧，抽自有项目）＋ 文学锚 `samples/luxun_qiuye.txt`；`samples/ai_gen/`（AI 合成腔，`make_ai_samples.py` 生成，固定种子可复现）
-- `python3 calibrate.py` 输出两群分布与建议阈值；阈值按人类语料分位数标定（当前：满分点约等于 p75）
-- 诚实边界：AI 侧为构造样本，分离含构造性；真实 AI 输出复验排在 v1.1
+- 语料：`samples/human/`（真人侧，抽自有项目）＋ 文学锚 `samples/luxun_qiuye.txt`；`samples/ai_gen/`（AI 合成腔，`make_ai_samples.py` 生成，固定种子可复现）＋ `samples/ai_real/`（真实 AI 输出，`make_real_ai_samples.py` 生成）
+- `python3 calibrate.py` 输出分布与建议阈值；阈值按人类语料分位数标定（当前：满分点约等于 p75）
+- 诚实边界：AI 侧构造样本的局限已于 v1.1 用真实样本复验（**结论：分数量的不是作者身份，是文字本身**——强模型能得高分、典型腔仍被压低；见 CHANGELOG v1.1）。真实分布目前只测一个模型一种场景，后续用更多模型与文体复量
 
 ## 四、红线（不可越，发布口径）
 
