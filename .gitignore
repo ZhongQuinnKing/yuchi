@@ -3,3 +3,4 @@ __pycache__/
 .DS_Store
 .stdin_tmp.txt
 web/_shot*.png
+.privacy-ok
