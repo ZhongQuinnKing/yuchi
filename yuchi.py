@@ -6,7 +6,8 @@
 不查词表层（不打词表）；依据：句长节奏是 AI 文本最强判别特征（多项研究共识），
 有效改写必是结构重构（知网实测：同义词替换 55%→53% 无效，结构重排→11%）。
 
-五层指标：大句节奏 / 小句呼吸 / 密度 / 结构 / 段落。
+五层指标：大句节奏 / 小句呼吸 / 密度 / 结构 / 段落；
+另有版式检查：量 markdown 符号残留（加粗、反引号、井号、分隔线等），只报告、不进文气总分。
 阈值集中在 CONFIG，用 calibrate.py 按语料校准（当前为先验值）。
 用法：
     python3 yuchi.py <文件路径> [--title 标题] [--poem|--qu|--fu|--lian]
@@ -53,6 +54,21 @@ QUOTE_STRIP = re.compile(
 )
 QUOTE_BLOCK = re.compile(r"^[ \t]*> .*$", re.M)
 
+# ================= 版式检查（符号残留） =================
+# 量版式层的 markdown 残留：交付文本里不该有排版符号。
+# 确定性项直接计数；斟酌项低权计——正常中文行文也可能用，防误伤。
+EMOJI_RE = re.compile(
+    "[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U00002B00-\U00002BFF\U0000FE0F]")
+BOLD_RE = re.compile(r"\*\*")
+BACKTICK_RE = re.compile(r"`")
+HEADING_LINE = re.compile(r"^\s*#{1,6}\s")
+DIVIDER_LINE = re.compile(r"^\s*(-{3,}|\*{3,}|_{3,})\s*$")
+QUOTE_LINE = re.compile(r"^\s*>\s")
+LIST_LINE = re.compile(r"^\s*[-*]\s+\S")
+LINK_RE = re.compile(r"\[[^\]\n]+\]\([^)\n]*\)")
+SUP_RE = re.compile(r"[\w一-鿿]\^")
+FENCE_LINE = re.compile(r"^\s*```")
+
 # 评分阈值（先验值，待 calibrate.py 按语料校准）：每项 [满分点, 零点]
 CONFIG = {
     # 满分点≈人类语料 p75、零点≈AI 语料中位（2026-10-09 按分位数分布重标）
@@ -65,6 +81,12 @@ CONFIG = {
     "vague_density": [0.2, 1.0],   # 虚词密度 / 百字：越低越好
     "struct_score": [0.0, 6.0],    # 列举词 + 2×总结词：越低越好
     "para_cv": [0.58, 0.20],       # 段落变异系数：越高越好
+    # 版式检查权重：确定性项计满，斟酌项低权（初版先验，可调）
+    "symbol_weights": {"bold": 1.0, "backtick": 1.0, "heading": 1.0,
+                       "divider": 1.0, "emoji": 1.0,
+                       "quote": 0.2, "list": 0.2, "link": 0.2, "sup": 0.2,
+                       "fence": 0.3},
+    "symbol_zero": [0, 8],         # 版式分：0 加权处满分、8 加权处零点
 }
 
 # 综合权重（四层）
@@ -160,6 +182,84 @@ def longest_flat_run(lens, spread=8):
     return best_len, best_len / n
 
 
+def analyze_symbols(text):
+    """版式层检查：markdown 符号残留（种类、计数、行号）。
+
+    确定性项（直接报）：加粗 **、反引号 `、行首井号、独立分隔线、emoji；
+    斟酌项（低权计）：行首引用 >、列表标记 -/*、[文字](链接)、^ 上标、``` 围栏。
+    语义边界：单星号不算加粗（注脚式行文不误伤）；本函数只报告，不进文气总分。
+    """
+    lines = text.split("\n")
+    sym = {"bold": 0, "backtick": 0, "heading": 0, "divider": 0, "emoji": 0,
+           "quote": 0, "list": 0, "link": 0, "sup": 0, "fence": 0}
+    pos = {k: [] for k in sym}
+    for i, raw in enumerate(lines, 1):
+        s = raw.strip()
+        for k, n in (("bold", len(BOLD_RE.findall(s))),
+                     ("backtick", len(BACKTICK_RE.findall(s))),
+                     ("emoji", len(EMOJI_RE.findall(s))),
+                     ("link", len(LINK_RE.findall(s))),
+                     ("sup", len(SUP_RE.findall(s)))):
+            if n:
+                sym[k] += n
+                if len(pos[k]) < 20:
+                    pos[k].append((i, s[:24] + ("…" if len(s) > 24 else "")))
+        for k, pat in (("heading", HEADING_LINE), ("divider", DIVIDER_LINE),
+                       ("quote", QUOTE_LINE), ("list", LIST_LINE),
+                       ("fence", FENCE_LINE)):
+            if pat.match(raw):
+                sym[k] += 1
+                if len(pos[k]) < 20:
+                    pos[k].append((i, s[:24] + ("…" if len(s) > 24 else "")))
+    w = CONFIG["symbol_weights"]
+    raw_score = sum(sym[k] * w[k] for k in sym)
+    definite = sum(sym[k] for k in ("bold", "backtick", "heading", "divider", "emoji"))
+    advisory = sum(sym[k] for k in ("quote", "list", "link", "sup", "fence"))
+    return {"counts": sym, "positions": pos,
+            "definite": definite, "advisory": advisory,
+            "raw": round(raw_score, 1),
+            "layout": round(soft(*CONFIG["symbol_zero"], raw_score), 3),
+            "clean": definite + advisory == 0}
+
+
+def symbol_verdict(s):
+    if s["clean"]:
+        return "干净"
+    if s["raw"] < 2:
+        return "轻微残留"
+    if s["raw"] < 8:
+        return "中度残留"
+    return "重度残留"
+
+
+def render_symbols(s):
+    """【版式层】报告。干净时返回空串——静默，不给好文本添噪音。"""
+    if s["clean"]:
+        return ""
+    c = s["counts"]
+    out = ["【版式层】",
+           f"  符号残留 {s['definite']} 处（加粗 {c['bold']}／反引号 {c['backtick']}／"
+           f"井号标题 {c['heading']}／分隔线 {c['divider']}／emoji {c['emoji']}）"
+           f"　版式：{symbol_verdict(s)}"]
+    shown = 0
+    for k, label in (("bold", "加粗"), ("backtick", "反引号"), ("heading", "井号标题"),
+                     ("divider", "分隔线"), ("emoji", "emoji")):
+        for i, snip in s["positions"][k]:
+            if shown >= 12:
+                break
+            out.append(f"  第 {i:>2} 行 [{label}] {snip}")
+            shown += 1
+        if shown >= 12:
+            break
+    if s["advisory"]:
+        parts = "／".join(
+            f"{label} {c[k]}" for k, label in
+            (("quote", "引用块"), ("list", "列表标记"), ("link", "链接式"),
+             ("sup", "上标"), ("fence", "代码围栏")) if c[k])
+        out.append(f"  斟酌项（低权计，正常行文可用，自行取舍）：{parts}")
+    return "\n".join(out) + "\n"
+
+
 def analyze(text):
     paras = split_paragraphs(text)
     all_text = "\n".join(paras)
@@ -244,6 +344,7 @@ def analyze(text):
     score = round(100 * (WEIGHTS["rhythm"] * s_rhythm + WEIGHTS["density"] * s_density
                          + WEIGHTS["struct"] * s_struct + WEIGHTS["para"] * s_para))
     r["score"] = max(0, min(100, score))
+    r["symbols"] = analyze_symbols(text)
     r["form"], r["form_item_ratio"] = detect_form(text)
     return r
 
@@ -839,6 +940,29 @@ p { font-size: 14px; line-height: 1.9; margin: 6px 0; }
 """
 
 
+def symbol_html_card(r):
+    """版式检查卡片；干净时返回空串（静默）。"""
+
+    def esc(s):
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    s = r.get("symbols")
+    if not s or s["clean"]:
+        return ""
+    c = s["counts"]
+    head = (f"<p>符号残留 {s['definite']} 处（加粗 {c['bold']}／反引号 {c['backtick']}／"
+            f"井号标题 {c['heading']}／分隔线 {c['divider']}／emoji {c['emoji']}）"
+            f"　{esc(symbol_verdict(s))}</p>")
+    items = []
+    for k, label in (("bold", "加粗"), ("backtick", "反引号"), ("heading", "井号标题"),
+                     ("divider", "分隔线"), ("emoji", "emoji")):
+        for i, sn in s["positions"][k][:3]:
+            items.append(f"<li>第 {i} 行：{esc(sn)}</li>")
+    body = "".join(items) or "<li>位置从略</li>"
+    return ('<div class="card"><h2>版式检查</h2>' + head + "<ol>" + body + "</ol>"
+            "<p>版式层只报告不计分。符号残留清掉再交付。</p></div>")
+
+
 def render_html(r, title):
     """把诊断渲染成单文件 HTML 报告（数据与命令行/网页同一套）。"""
 
@@ -853,6 +977,7 @@ def render_html(r, title):
             "<p>玉尺的呼吸分是给散文的。这类文本的“整齐”是文体要求，不是毛病；"
             "该看的是条目齐不齐、信息全不全、层级顺不顺。</p>"
             f'<p class="sub">客观读数：{r["n"]} 句 / {r["total"]} 字。</p></div>'
+            + symbol_html_card(r)
         )
     else:
         maxlen = max(r["lens"]) if r["lens"] else 1
@@ -874,6 +999,7 @@ def render_html(r, title):
             "</div>"
             f'<div class="card"><h2>句长节奏图</h2>{rows}</div>'
             f'<div class="card"><h2>体检与改法</h2><ol>{notes}</ol></div>'
+            + symbol_html_card(r)
         )
     return (
         "<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n"
@@ -892,6 +1018,16 @@ def render_json(r):
         "verdict": verdict(r["score"]),
         "form": r["form"],
         "form_item_ratio": round(r["form_item_ratio"], 3),
+        "symbols": {
+            "definite": r["symbols"]["definite"],
+            "advisory": r["symbols"]["advisory"],
+            "raw": r["symbols"]["raw"],
+            "layout": r["symbols"]["layout"],
+            "verdict": symbol_verdict(r["symbols"]),
+            "counts": r["symbols"]["counts"],
+            "positions": {k: [[i, sn] for i, sn in v]
+                          for k, v in r["symbols"]["positions"].items()},
+        },
         "layers": {
             "rhythm": round(r["s_rhythm"], 3),
             "density": round(r["s_density"], 3),
@@ -917,15 +1053,16 @@ def render_json(r):
 
 def render_batch(files):
     """批量对照表：多文件一屏对照（改前/改后最常用）。"""
-    heads = ("文件", "分数", "句数", "大句CV", "套话/百字", "结构")
+    heads = ("文件", "分数", "句数", "大句CV", "套话/百字", "结构", "符号")
     rows = []
     for f in files:
         try:
             r = analyze(read_text(f))
             rows.append((os.path.basename(f), str(r["score"]), str(r["n"]),
-                         f"{r['cv']:.2f}", f"{r['glue_density']:.1f}", r["struct"]))
+                         f"{r['cv']:.2f}", f"{r['glue_density']:.1f}", r["struct"],
+                         str(r["symbols"]["definite"])))
         except Exception:
-            rows.append((os.path.basename(f), "读取失败", "—", "—", "—", "—"))
+            rows.append((os.path.basename(f), "读取失败", "—", "—", "—", "—", "—"))
 
     def w(s):
         return sum(2 if "一" <= c <= "鿿" else 1 for c in str(s))
@@ -981,6 +1118,10 @@ def render_structured(r, title):
     out.append("")
     out.append(f"（客观读数：{r['n']} 句 / {r['total']} 字。文中的叙述段若想按散文量，")
     out.append("单独摘出来再量。）")
+    out.append("")
+    sym = render_symbols(r["symbols"])
+    if sym:
+        out.append(sym)
     return "\n".join(out)
 
 
@@ -1001,6 +1142,10 @@ def bar(n, scale=2, cap=40):
 def make_tips(r):
     """落到句子的改法（命令行与 HTML 报告卡共用）。"""
     tips = []
+    s = r.get("symbols")
+    if s and not s["clean"]:
+        tips.append(f"版式有 {s['definite']} 处符号残留（加粗、反引号、井号、分隔线这类排版标记）。"
+                    "交付前清干净：加粗换成引号强调，代码名用「」包起来，分隔线删掉。")
     if r["flat_n"] >= 4:
         tips.append(f"全篇有一段 {r['flat_n']} 句的平滑区，长度变化不到 8 字。"
                     "挑其中最长的两句动手：一句拆成两句，一句砍到十字以内。")
@@ -1076,6 +1221,9 @@ def render(path, title):
     else:
         out.append("  单段文本，段落层未测（多段文章才有此项）")
     out.append("")
+    sym = render_symbols(r["symbols"])
+    if sym:
+        out.append(sym)
     out.append("【改法（落到句，不给形容词）】")
     tips = make_tips(r)
     for i, t in enumerate(tips, 1):

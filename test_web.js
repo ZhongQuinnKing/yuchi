@@ -77,6 +77,16 @@ for (const f of ['samples/ai_real/o_08.txt', 'samples/ai_real/r_01.txt', 'sample
   if (!same) allOk = false;
 }
 
+console.log('\n── 版式检查：JS vs Python（符号计数）──');
+for (const f of ['samples/symbol_polluted.txt', 'samples/s_edge_mixed.txt', 'samples/ai_sample.txt']) {
+  const js = analyze(fs.readFileSync(path.join(here, f), 'utf8'));
+  const pyData = JSON.parse(py(`"${f}" --json`));
+  const same = ['bold','backtick','heading','divider','emoji','quote','list','link','sup','fence']
+    .every(k => js.symbols.counts[k] === pyData.symbols.counts[k]);
+  console.log(`${f}\tJS ${JSON.stringify(js.symbols.counts)}  PY ${JSON.stringify(pyData.symbols.counts)}\t${same ? '✓' : '✗ 不一致'}`);
+  if (!same) allOk = false;
+}
+
 console.log('\n── 纯英文：py 太短保护 ──');
 const en = JSON.parse(py('"samples/s_edge_english.txt" --json'));
 const enOk = en.error !== undefined;

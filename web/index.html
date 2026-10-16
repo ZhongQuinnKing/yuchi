@@ -126,12 +126,29 @@ const STRUCT_ONLY = new Set([...GLUE_WORDS, ...ENUM_WORDS, ...SUM_WORDS]);
 /* 统计词频前先剥离引文：成对引号（含直引号）与 markdown 引用块行 */
 const QUOTE_STRIP = /[“][^“”]*[”]|[「][^「」]*[」]|[『][^『』]*[』]|["][^"]{1,120}["]/g;
 const QUOTE_BLOCK = /^[ \t]*> .*$/gm;
+/* ================= 版式检查（符号残留） ================= */
+/* 量版式层的 markdown 残留：交付文本里不该有排版符号。
+   确定性项直接计数；斟酌项低权计——正常中文行文也可能用，防误伤。 */
+const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}️]/gu;
+const BOLD_RE = /\*\*/g;
+const BACKTICK_RE = /`/g;
+const HEADING_LINE = /^\s*#{1,6}\s/;
+const DIVIDER_LINE = /^\s*(-{3,}|\*{3,}|_{3,})\s*$/;
+const QUOTE_LINE = /^\s*>\s/;
+const LIST_LINE = /^\s*[-*]\s+\S/;
+const LINK_RE = /\[[^\]\n]+\]\([^)\n]*\)/g;
+const SUP_RE = /[\w一-鿿]\^/g;
+const FENCE_LINE = /^\s*```/;
 const CONFIG = {
   /* 满分点≈人类语料 p75、零点≈AI 语料中位（2026-10-09 重标） */
   sent_cv: [0.55, 0.18], clause_cv: [0.55, 0.30], flat_run: [2, 6],
   short_per200: [1.5, 0.2], glue_density: [0.5, 3.0], dash_density: [0.6, 3.0],
   vague_density: [0.2, 1.0],
   struct_score: [0.0, 6.0], para_cv: [0.58, 0.20],
+  /* 版式检查权重：确定性项计满，斟酌项低权（初版先验，可调） */
+  symbol_weights: { bold: 1.0, backtick: 1.0, heading: 1.0, divider: 1.0, emoji: 1.0,
+                    quote: 0.2, list: 0.2, link: 0.2, sup: 0.2, fence: 0.3 },
+  symbol_zero: [0, 8],
 };
 const WEIGHTS = { rhythm: 0.40, density: 0.25, struct: 0.20, para: 0.15 };
 
@@ -184,6 +201,53 @@ function longestFlatRun(lens, spread = 8) {
     if (j - i > bl) bl = j - i;
   }
   return [bl, bl / n];
+}
+
+function analyzeSymbols(text) {
+  /* 版式层检查：markdown 符号残留（种类、计数、行号）。
+     确定性项：加粗 **、反引号 `、行首井号、独立分隔线、emoji；
+     斟酌项（低权）：行首引用 >、列表标记 -/*、[文字](链接)、^ 上标、``` 围栏。
+     语义边界：单星号不算加粗；本函数只报告，不进文气总分。 */
+  const sym = { bold: 0, backtick: 0, heading: 0, divider: 0, emoji: 0,
+                quote: 0, list: 0, link: 0, sup: 0, fence: 0 };
+  const pos = {};
+  for (const k in sym) pos[k] = [];
+  const lines = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const s = lines[i].trim();
+    const snip = s.slice(0, 24) + (s.length > 24 ? "…" : "");
+    for (const [k, re] of [["bold", BOLD_RE], ["backtick", BACKTICK_RE],
+                           ["emoji", EMOJI_RE], ["link", LINK_RE], ["sup", SUP_RE]]) {
+      const m = s.match(re);
+      if (m) {
+        sym[k] += m.length;
+        if (pos[k].length < 20) pos[k].push([i + 1, snip]);
+      }
+    }
+    for (const [k, re] of [["heading", HEADING_LINE], ["divider", DIVIDER_LINE],
+                           ["quote", QUOTE_LINE], ["list", LIST_LINE], ["fence", FENCE_LINE]]) {
+      if (re.test(lines[i])) {
+        sym[k] += 1;
+        if (pos[k].length < 20) pos[k].push([i + 1, snip]);
+      }
+    }
+  }
+  const w = CONFIG.symbol_weights;
+  let raw = 0;
+  for (const k in sym) raw += sym[k] * w[k];
+  const definite = sym.bold + sym.backtick + sym.heading + sym.divider + sym.emoji;
+  const advisory = sym.quote + sym.list + sym.link + sym.sup + sym.fence;
+  return { counts: sym, positions: pos, definite, advisory,
+           raw: Math.round(raw * 10) / 10,
+           layout: Math.round(soft(...CONFIG.symbol_zero, raw) * 1000) / 1000,
+           clean: definite + advisory === 0 };
+}
+
+function symbolVerdict(s) {
+  if (s.clean) return "干净";
+  if (s.raw < 2) return "轻微残留";
+  if (s.raw < 8) return "中度残留";
+  return "重度残留";
 }
 
 function analyze(text) {
@@ -247,6 +311,7 @@ function analyze(text) {
   r.score = Math.max(0, Math.min(100, Math.round(100 * (
     WEIGHTS.rhythm * sRhythm + WEIGHTS.density * sDensity +
     WEIGHTS.struct * sStruct + WEIGHTS.para * sPara))));
+  r.symbols = analyzeSymbols(text);
   const fm = detectForm(text);
   r.form = fm.form; r.formItemRatio = fm.ratio;
   return r;
@@ -8695,6 +8760,8 @@ function verdict(score) {
 
 function makeTips(r) {
   const tips = [];
+  if (r.symbols && !r.symbols.clean)
+    tips.push(`版式有 ${r.symbols.definite} 处符号残留（加粗、反引号、井号、分隔线这类排版标记）。交付前清干净：加粗换成引号强调，代码名用「」包起来，分隔线删掉。`);
   if (r.flatN >= 4)
     tips.push(`全篇有一段 ${r.flatN} 句的平滑区，长度变化不到 8 字。挑其中最长的两句动手：一句拆成两句，一句砍到十字以内。`);
   if (r.cv < 0.30)
@@ -8720,6 +8787,27 @@ const DEMO = "在当今快速发展的现代社会中，人际关系的重要性
 
 function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
+function symbolCard(r) {
+  /* 版式检查卡片；干净时返回空串（静默） */
+  if (!r.symbols || r.symbols.clean) return "";
+  const s = r.symbols, c = s.counts;
+  const rows = [];
+  [["bold", "加粗"], ["backtick", "反引号"], ["heading", "井号标题"],
+   ["divider", "分隔线"], ["emoji", "emoji"]]
+    .forEach(([k, label]) => s.positions[k].slice(0, 3)
+      .forEach(([n, sn]) => rows.push(`<li>第 ${n} 行［${label}］${esc(sn)}</li>`)));
+  const adv = [["quote", "引用块"], ["list", "列表标记"], ["link", "链接式"],
+               ["sup", "上标"], ["fence", "代码围栏"]]
+    .filter(([k]) => c[k]).map(([k, label]) => `${label} ${c[k]}`).join("／");
+  return `<div class="card"><h3>版 式 检 查</h3>
+    <div class="kv"><span>符号残留 ${s.definite} 处</span><b>${symbolVerdict(s)}</b></div>
+    <div class="sub">加粗 ${c.bold}／反引号 ${c.backtick}／井号标题 ${c.heading}／分隔线 ${c.divider}／emoji ${c.emoji}</div>
+    <ol class="tips">${rows.join("") || "<li>位置从略</li>"}</ol>
+    ${adv ? `<div class="sub">斟酌项（低权计，正常行文可用，自行取舍）：${adv}</div>` : ""}
+    <div class="sub">版式层只报告不计分。符号残留清掉再交付。</div>
+  </div>`;
+}
+
 function renderStructured(r) {
   return `<div class="card">
     <div class="score-row"><span class="score" style="font-size:30px">文体识别</span></div>
@@ -8730,7 +8818,7 @@ function renderStructured(r) {
     <p>玉尺的呼吸分是给散文的。这类文本的“整齐”是文体要求，不是毛病——拿散文的尺量条目，量出来的高分不作数，低分也不算数。</p>
     <p>这一类该看的是：条目齐不齐、信息全不全、层级顺不顺。那是文体的规矩，不是呼吸。</p>
     <div class="sub">客观读数：${r.n} 句 / ${r.total} 字。文中的叙述段若想按散文量，单独摘出来再量。</div>
-  </div>`;
+  </div>` + (r.symbols && !r.symbols.clean ? symbolCard(r) : "");
 }
 
 function renderReport(r) {
@@ -8774,6 +8862,8 @@ function renderReport(r) {
       <div class="sub">${r.nPara} 段。越参差越像人写。</div></div>`);
   }
 
+  if (r.symbols && !r.symbols.clean) L.push(symbolCard(r));
+
   L.push(`<div class="card"><h3>改 法（落到句，不给形容词）</h3>
     <ol class="tips">${makeTips(r).map(t => `<li>${esc(t)}</li>`).join("")}</ol></div>`);
 
@@ -8783,10 +8873,14 @@ function renderReport(r) {
 
 function toTextReport(r, plain) {
   if (r.form === "structured") {
-    return ["玉尺 · 文气诊断",
+    const L = ["玉尺 · 文气诊断",
       `文体识别：条目 / 结构化文本（编号或符号开头的行占 ${(r.formItemRatio * 100).toFixed(0)}%）`,
       "玉尺的呼吸分是给散文的。这类文本的整齐是文体要求，不是毛病。",
-      "这一类该看的是：条目齐不齐、信息全不全、层级顺不顺。"].join("\n");
+      "这一类该看的是：条目齐不齐、信息全不全、层级顺不顺。"];
+    if (r.symbols && !r.symbols.clean) {
+      L.push(`版式：符号残留 ${r.symbols.definite} 处，位置见网页报告`);
+    }
+    return L.join("\n");
   }
   const L = [];
   L.push(`玉尺 · 文气诊断`);
@@ -8796,6 +8890,10 @@ function toTextReport(r, plain) {
   L.push(`套话密度 ${r.glueDensity.toFixed(1)}/百字　结构：${r.struct}`);
   L.push("改法：");
   makeTips(r).forEach((t, i) => L.push(`${i + 1}. ${t}`));
+  if (r.symbols && !r.symbols.clean) {
+    const c = r.symbols.counts;
+    L.push(`版式：符号残留 ${r.symbols.definite} 处（加粗 ${c.bold}／反引号 ${c.backtick}／井号 ${c.heading}／分隔线 ${c.divider}），位置见网页报告`);
+  }
   return L.join("\n");
 }
 

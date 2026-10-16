@@ -208,5 +208,68 @@ class TestRegulatedAndCiLian(unittest.TestCase):
             os.unlink(p)
 
 
+class TestSymbols(unittest.TestCase):
+    """版式层（符号残留）：计数、位置、语义边界、活性探针。
+
+    探针＝test_symbol_dimension_wired：analyze 结果带 symbols、json 带 symbols——
+    检测的接线被删，本类立即红（证明检测真被调用）。
+    """
+
+    POLLUTED = ("# 标题\n\n---\n\n> 引用行\n\n"
+                "正文里**加粗**，代码名`yuchi.py`，第二段也有**加粗**和`x`。"
+                "院子里的桂花开了，香气顺着风过来，又轻又远。他坐在廊下写字，"
+                "墨迹在纸上慢慢干，一行又一行。\n\n"
+                "- 列表一\n- 列表二\n\n中文行文。*单星号不是加粗*。\n")
+
+    def test_polluted_counts(self):
+        r = yuchi.analyze(self.POLLUTED)
+        c = r["symbols"]["counts"]
+        self.assertEqual(c["bold"], 4)       # 两对 **＝4 个标记
+        self.assertEqual(c["backtick"], 4)   # `yuchi.py` 与 `x`
+        self.assertEqual(c["heading"], 1)
+        self.assertEqual(c["divider"], 1)
+        self.assertEqual(c["quote"], 1)
+        self.assertEqual(c["list"], 2)
+        self.assertEqual(r["symbols"]["definite"], 10)
+        self.assertFalse(r["symbols"]["clean"])
+
+    def test_single_asterisk_not_bold(self):
+        # 语义边界：注脚式单星号不算加粗残留
+        r = yuchi.analyze("雨停了。*注：这里有一个星号。*风吹过来，纸页翻动，"
+                          "灯晃了一下，影子在墙上斜过去。")
+        self.assertEqual(r["symbols"]["counts"]["bold"], 0)
+
+    def test_clean_silent_in_render(self):
+        p = _tmp("林子里安静。鸟叫了一声，又没了。他坐着，看光从叶缝里落下来，"
+                 "一点点挪过脚背。后来起了风。他站起来，把帽子扣上，走了。")
+        try:
+            self.assertNotIn("版式层", yuchi.render(p, "净"))
+        finally:
+            os.unlink(p)
+
+    def test_polluted_render_shows_positions(self):
+        p = _tmp(self.POLLUTED)
+        try:
+            out = yuchi.render(p, "污")
+            self.assertIn("【版式层】", out)
+            self.assertIn("符号残留", out)
+            self.assertIn("第", out)
+        finally:
+            os.unlink(p)
+
+    def test_symbol_dimension_wired(self):
+        # 活性探针：analyze / json 两路接线全在
+        r = yuchi.analyze(self.POLLUTED)
+        self.assertIn("symbols", r)
+        j = json.loads(yuchi.render_json(r))
+        self.assertIn("symbols", j)
+        self.assertGreaterEqual(j["symbols"]["definite"], 10)
+
+    def test_json_symbols_block(self):
+        j = json.loads(yuchi.render_json(yuchi.analyze(self.POLLUTED)))
+        self.assertEqual(j["symbols"]["counts"]["divider"], 1)
+        self.assertIsInstance(j["symbols"]["positions"]["bold"], list)
+
+
 if __name__ == "__main__":
     unittest.main()
