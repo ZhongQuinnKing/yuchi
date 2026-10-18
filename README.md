@@ -1,8 +1,8 @@
 # 玉尺 · 量一量中文的呼吸
 
 > 原作者：ZhongQuinnKing（主号署名）
-> 许可：见 [LICENSE](LICENSE)（内容 CC BY-NC-ND 4.0）与 [LICENSE-CODE](LICENSE-CODE)（代码 MIT）（五档：免费用／自改自由／转发署名／改版发布先授权／商用零豁免）
-> 商用与合作：请先联系 hello@xinchuan.dev（标题注明【商用授权】或【改编授权】）；也可走本仓库 issue
+> 许可：见 [LICENSE](LICENSE)（内容 CC BY-NC-ND 4.0）与 [LICENSE-CODE](LICENSE-CODE)（代码 MIT）（五档：免费用／自改自由／转发署名／改版发布先授权／商用零豁免——本许可本身不授予商用权）
+> 商用授权与合作：需商用请先联系 hello@xinchuan.dev 取得书面授权（标题注明【商用授权】或【改编授权】）；也可走本仓库 issue
 
 > 「仙人持玉尺，度君多少才。」
 > ——旧题李白《上清宝鼎诗》（作者有考证争议，《全唐诗》补遗收入李白名下）
