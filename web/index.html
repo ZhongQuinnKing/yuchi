@@ -8702,7 +8702,7 @@ function renderPoemReport(r) {
   L.push(`</div>`);
 
   L.push(`<div class="card"><h3>行 尾</h3>
-    <div class="sub">${r.tails.join('／')}</div>
+    <div class="sub">${esc(r.tails.join('／'))}</div>
     <div class="kv"><span>相邻同尾</span><b>${r.adjRep} 处</b></div></div>`);
 
   let extra = [];
